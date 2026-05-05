@@ -18,188 +18,134 @@
   h1 { color: #1a73e8; margin: 0 0 6px; font-size: 22px; }
   .hint { color: #6c757d; font-size: 13px; margin-bottom: 14px; line-height: 1.6; }
   .panel {
-    background: #fff;
-    border-radius: 10px;
-    padding: 16px 20px;
-    margin-bottom: 14px;
+    background: #fff; border-radius: 10px; padding: 16px 20px; margin-bottom: 14px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   }
   .panel h2 {
-    font-size: 15px;
-    margin: 0 0 10px;
-    color: #1a73e8;
-    border-bottom: 1px solid #e8f0fe;
-    padding-bottom: 6px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    font-size: 15px; margin: 0 0 10px; color: #1a73e8;
+    border-bottom: 1px solid #e8f0fe; padding-bottom: 6px;
+    display: flex; justify-content: space-between; align-items: center;
   }
   .form-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 10px;
-    margin-bottom: 10px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px; margin-bottom: 10px;
   }
   .form-row label {
-    display: flex;
-    flex-direction: column;
-    font-size: 12px;
-    color: #495057;
+    display: flex; flex-direction: column; font-size: 12px; color: #495057;
   }
   .form-row label > span { margin-bottom: 3px; font-weight: 600; }
   input, select {
-    padding: 8px 10px;
-    border: 1.5px solid #d0d7de;
-    border-radius: 6px;
-    font-size: 14px;
-    font-family: inherit;
+    padding: 8px 10px; border: 1.5px solid #d0d7de; border-radius: 6px;
+    font-size: 14px; font-family: inherit;
   }
   input:focus, select:focus {
-    border-color: #1a73e8;
-    outline: none;
+    border-color: #1a73e8; outline: none;
     box-shadow: 0 0 0 3px rgba(26,115,232,0.15);
   }
 
-  /* 模式切換 */
   .mode-switch {
-    display: inline-flex;
-    background: #f1f3f5;
-    border-radius: 22px;
-    padding: 3px;
-    gap: 2px;
+    display: inline-flex; background: #f1f3f5; border-radius: 22px; padding: 3px; gap: 2px;
   }
   .mode-switch label {
-    padding: 6px 18px;
-    border-radius: 18px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 600;
-    color: #495057;
-    transition: all 0.15s;
+    padding: 6px 18px; border-radius: 18px; cursor: pointer;
+    font-size: 13px; font-weight: 600; color: #495057; transition: all 0.15s;
   }
   .mode-switch label.active { background: #1a73e8; color: #fff; }
   .mode-switch input[type="radio"] { display: none; }
 
-  /* 表格 — Excel 風 */
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th {
-    background: #f1f3f5;
-    font-weight: 700;
-    font-size: 12px;
-    color: #495057;
-    border: 1px solid #d0d7de;
-    padding: 6px 8px;
-    text-align: left;
-    position: sticky;
-    top: 0;
-    z-index: 1;
+    background: #f1f3f5; font-weight: 700; font-size: 12px; color: #495057;
+    border: 1px solid #d0d7de; padding: 6px 8px; text-align: left;
+    position: sticky; top: 0; z-index: 1;
   }
   thead th .req { color: #c62828; margin-left: 2px; }
-  thead th .opt { color: #adb5bd; margin-left: 2px; font-weight: 400; }
+  thead th .opt { color: #adb5bd; margin-left: 2px; font-weight: 400; font-size: 11px; }
   tbody td {
-    padding: 0;
-    border: 1px solid #e9ecef;
-    background: #fff;
+    padding: 0; border: 1px solid #e9ecef; background: #fff; position: relative;
   }
   tbody td.idx {
-    text-align: center;
-    color: #6c757d;
-    background: #f8f9fa;
-    font-size: 12px;
-    padding: 4px 6px;
-    width: 36px;
+    text-align: center; color: #6c757d; background: #f8f9fa; font-size: 12px;
+    padding: 4px 6px; width: 36px;
   }
   tbody td input,
   tbody td select {
-    width: 100%;
-    border: none;
-    padding: 6px 8px;
-    background: transparent;
-    font-size: 13px;
-    border-radius: 0;
-    border: 2px solid transparent;
+    width: 100%; border: none; padding: 6px 8px; background: transparent;
+    font-size: 13px; border-radius: 0; border: 2px solid transparent;
   }
   tbody td input:focus,
   tbody td select:focus {
-    outline: none;
-    border: 2px solid #1a73e8;
-    background: #f0f4ff;
+    outline: none; border: 2px solid #1a73e8; background: #f0f4ff;
     box-shadow: none;
   }
   tbody td input.mono { font-family: Consolas, Menlo, monospace; }
-  tbody td.action {
-    width: 36px;
-    text-align: center;
-    background: #f8f9fa;
-  }
+  tbody td input.id-ok { background: #f1f8e9; }
+  tbody td input.id-err { background: #ffebee; border-color: #e53935 !important; }
+  tbody td.action { width: 36px; text-align: center; background: #f8f9fa; }
   tbody td.action button {
-    background: transparent;
-    color: #c62828;
-    border: none;
-    width: 24px;
-    height: 24px;
-    font-size: 16px;
-    cursor: pointer;
-    border-radius: 4px;
+    background: transparent; color: #c62828; border: none;
+    width: 24px; height: 24px; font-size: 16px; cursor: pointer; border-radius: 4px;
   }
   tbody td.action button:hover { background: #ffebee; }
 
+  /* tooltip on validation */
+  tbody td .tip {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    background: #2e7d32; color: #fff; padding: 1px 6px; border-radius: 3px;
+    font-size: 10.5px; pointer-events: none;
+  }
+  tbody td .tip.bad { background: #c62828; }
+
   .actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
   button.btn {
-    padding: 9px 16px;
-    border-radius: 6px;
-    border: none;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    transition: all 0.15s;
+    padding: 9px 16px; border-radius: 6px; border: none; cursor: pointer;
+    font-size: 14px; font-weight: 600; transition: all 0.15s;
   }
   .btn-primary { background: #1a73e8; color: #fff; }
   .btn-primary:hover { background: #0d47a1; }
   .btn-secondary { background: #e9ecef; color: #495057; }
   .btn-secondary:hover { background: #d0d7de; }
-  .btn-danger { background: #fff; color: #c62828; border: 1px solid #ffcdd2; }
+  .btn-danger {
+    background: #fff; color: #c62828; border: 1px solid #ffcdd2;
+  }
   .btn-danger:hover { background: #ffebee; }
 
   .placeholder {
-    text-align: center;
-    color: #9aa3ad;
-    padding: 28px;
-    font-size: 14px;
+    text-align: center; color: #9aa3ad; padding: 28px; font-size: 14px;
   }
   .ver {
     position: fixed; right: 12px; bottom: 12px;
-    background: #1a73e8; color: #fff;
-    padding: 4px 10px; border-radius: 12px;
-    font-size: 11.5px; font-family: Consolas, monospace;
+    background: #1a73e8; color: #fff; padding: 4px 10px;
+    border-radius: 12px; font-size: 11.5px; font-family: Consolas, monospace;
   }
-  .kbd-tip {
-    font-size: 11.5px;
-    color: #6c757d;
-    background: #fffbe6;
-    padding: 6px 12px;
-    border-radius: 6px;
-    border-left: 3px solid #ffc107;
-    margin-bottom: 10px;
+  .superpowers {
+    background: linear-gradient(90deg, #e3f2fd 0%, #f0f4ff 100%);
+    border-radius: 8px; padding: 10px 14px; margin-bottom: 10px;
+    font-size: 12px; color: #495057; line-height: 1.7;
   }
+  .superpowers strong { color: #1a73e8; }
   kbd {
-    background: #495057;
-    color: #fff;
-    padding: 1px 5px;
-    border-radius: 3px;
-    font-size: 11px;
-    font-family: Consolas, monospace;
+    background: #495057; color: #fff; padding: 1px 5px;
+    border-radius: 3px; font-size: 11px; font-family: Consolas, monospace;
   }
+  .toast {
+    position: fixed; right: 20px; top: 20px; z-index: 100;
+    background: #2e7d32; color: #fff; padding: 10px 18px;
+    border-radius: 8px; font-size: 13px; font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    animation: toastIn 0.2s; opacity: 0.95;
+  }
+  @keyframes toastIn { from { transform: translateY(-20px); opacity: 0 } to { transform: none; opacity: 0.95 } }
 </style>
 </head>
 <body>
 
 <div class="wrap">
 
-<h1>送驗單快速輸入器</h1>
+<h1>送驗單快速輸入器 <span style="font-size:13px;color:#6c757d;font-weight:400">— 比 Excel 更聰明</span></h1>
 <div class="hint">輸入個資後產出送驗單 XLSX（含 列印分頁 + 系統上傳分頁）</div>
 
-<!-- 表單：送驗單抬頭 -->
+<!-- 抬頭 -->
 <div class="panel">
   <h2>送驗單抬頭</h2>
   <div class="form-row">
@@ -222,7 +168,7 @@
   </div>
 </div>
 
-<!-- 送驗編號自動編碼 -->
+<!-- 自動編號 -->
 <div class="panel">
   <h2>送驗編號自動編碼</h2>
   <div class="form-row">
@@ -230,7 +176,6 @@
     <label><span>下一筆流水號（4 位）</span><input id="hdr_no_next" value="0001" style="font-family:Consolas,monospace"></label>
     <label><span>預覽下一筆送驗編號</span><input id="hdr_no_preview" readonly style="background:#f0f4ff;font-family:Consolas,monospace;font-weight:600"></label>
   </div>
-  <div class="hint" style="margin:0">送驗編號 = 年度區碼 + 4 位流水號（如 <code>1140505</code> + <code>0942</code> → <code>11405050942</code>）。新增列時自動帶入並 +1。</div>
 </div>
 
 <!-- 個案清單 -->
@@ -242,12 +187,18 @@
       <label data-mode="anon"><input type="radio" name="mode" value="anon">匿名送驗</label>
     </span>
   </h2>
-  <div class="kbd-tip">
-    🎹 <kbd>Tab</kbd> 跳下一欄 ｜ <kbd>Enter</kbd> 跳下一列同欄 ｜ <kbd>Shift</kbd>+<kbd>Tab</kbd> 上一欄 ｜ 在最後一格按 <kbd>Tab</kbd>/<kbd>Enter</kbd> 自動新增列
+
+  <div class="superpowers">
+    🚀 <strong>超能力</strong>：
+    <kbd>身分證</kbd>輸入 10 碼自動驗算 + 帶性別 ｜
+    <kbd>日期欄</kbd>打 <code>0828</code> 變 <code>今年/08/28</code>，<code>60616</code> 變 <code>60/06/16</code>，<code>t</code>=今天 ｜
+    <kbd>Ctrl+D</kbd> 複製上方格 ｜
+    從 Excel 複製多列直接 <kbd>Ctrl+V</kbd> 貼進來 ｜
+    <kbd>Tab/Enter</kbd> 跳格、最後格自動加列
   </div>
+
   <div class="actions">
     <button class="btn btn-primary" id="btnAddRow">+ 新增一列</button>
-    <button class="btn btn-secondary" id="btnAddBatch">+ 批次貼上</button>
     <button class="btn btn-secondary" id="btnLoadDraft">載入暫存</button>
     <button class="btn btn-danger" id="btnClear">清空</button>
   </div>
@@ -268,14 +219,12 @@
     <button class="btn btn-secondary" id="btnSaveDraft">💾 儲存暫存（本機）</button>
   </div>
   <div class="hint" style="margin-top:8px">
-    產出 XLSX 包含兩個分頁：<br>
-    1. <strong>送驗單</strong>（列印紙本）<br>
-    2. <strong>醫事檢驗檢體列表</strong>（⚡ 系統上傳用）
+    產出 XLSX 包含：1. <strong>送驗單</strong>（列印紙本）2. <strong>醫事檢驗檢體列表</strong>（⚡ 系統上傳用）
   </div>
 </div>
 
-</div><!-- /.wrap -->
-<div class="ver">v0.1.2</div>
+</div>
+<div class="ver">v0.1.3</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -284,62 +233,149 @@ const thead = $('dataThead');
 const emptyHint = $('emptyHint');
 
 // ================================================================
-// 民國日期工具
+// 工具：民國日期 + 智慧轉換
 // ================================================================
 function todayMinguo() {
   const d = new Date();
+  return mguDate(d);
+}
+function mguDate(d) {
   return (d.getFullYear() - 1911) + '/' +
     String(d.getMonth() + 1).padStart(2, '0') + '/' +
     String(d.getDate()).padStart(2, '0');
 }
 
+function smartDate(input) {
+  if (!input) return '';
+  let v = String(input).trim();
+  if (!v) return '';
+  // 簡寫
+  if (/^(t|today|今天)$/i.test(v)) return todayMinguo();
+  if (/^(y|yesterday|昨天|昨)$/i.test(v)) {
+    const d = new Date(); d.setDate(d.getDate() - 1); return mguDate(d);
+  }
+  // 純數字
+  const digits = v.replace(/\D/g, '');
+  if (digits.length === 4) {
+    // MMDD → 今年/MM/DD
+    const y = new Date().getFullYear() - 1911;
+    return y + '/' + digits.slice(0, 2) + '/' + digits.slice(2);
+  }
+  if (digits.length === 5) {
+    // YMMDD（多半是 YYY 民國前 1 碼為 0 → 不會這樣，跳過）
+    return v;
+  }
+  if (digits.length === 6) {
+    // YYMMDD → YY/MM/DD（民國 2 位）
+    return digits.slice(0,2) + '/' + digits.slice(2,4) + '/' + digits.slice(4);
+  }
+  if (digits.length === 7) {
+    // YYYMMDD → YYY/MM/DD
+    return digits.slice(0,3) + '/' + digits.slice(3,5) + '/' + digits.slice(5);
+  }
+  if (digits.length === 8) {
+    // YYYY (西元) MMDD → 民國/MM/DD
+    const yy = parseInt(digits.slice(0,4), 10);
+    if (yy >= 1900 && yy <= 2099) {
+      return (yy - 1911) + '/' + digits.slice(4,6) + '/' + digits.slice(6);
+    }
+  }
+  // 含分隔符
+  const parts = v.split(/[\.\-\/]/).map(x => x.trim()).filter(x => x);
+  if (parts.length === 3) {
+    let y = parts[0];
+    if (/^\d{4}$/.test(y)) {
+      const yy = parseInt(y, 10);
+      if (yy >= 1900) y = String(yy - 1911);
+    }
+    return y + '/' + parts[1].padStart(2,'0') + '/' + parts[2].padStart(2,'0');
+  }
+  return v;
+}
+
 // ================================================================
-// 兩種模式的欄位定義
+// 身分證檢核 + 性別推斷
+// ================================================================
+const LMAP = {
+  A:10,B:11,C:12,D:13,E:14,F:15,G:16,H:17,I:34,J:18,
+  K:19,L:20,M:21,N:22,O:35,P:23,Q:24,R:25,S:26,T:27,
+  U:28,V:29,W:32,X:30,Y:31,Z:33
+};
+const WEIGHT = [1,9,8,7,6,5,4,3,2,1,1];
+const ID_RE_NATIVE = /^[A-Z][0-9]{9}$/;
+const ID_RE_OLD_F = /^[A-Z][A-Z][0-9]{8}$/;
+
+function checkId(id) {
+  if (!id) return null;
+  if (ID_RE_NATIVE.test(id)) {
+    const code = String(LMAP[id[0]]) + id.slice(1);
+    let s = 0;
+    for (let i = 0; i < 11; i++) s += parseInt(code[i], 10) * WEIGHT[i];
+    return s % 10 === 0;
+  }
+  if (ID_RE_OLD_F.test(id)) {
+    const v1 = LMAP[id[0]], v2 = LMAP[id[1]];
+    if (v1 == null || v2 == null) return false;
+    const d = [Math.floor(v1/10), v1%10, v2%10];
+    for (let i = 2; i < 10; i++) d.push(parseInt(id[i], 10));
+    let s = 0;
+    for (let i = 0; i < 11; i++) s += d[i] * WEIGHT[i];
+    return s % 10 === 0;
+  }
+  return null; // 格式不符
+}
+
+function genderFromId(id) {
+  if (!id) return '';
+  if (ID_RE_NATIVE.test(id)) {
+    const c = id[1];
+    if (c === '1' || c === '8') return '1';
+    if (c === '2' || c === '9') return '2';
+  }
+  if (ID_RE_OLD_F.test(id)) {
+    const c = id[1];
+    if (c === 'A' || c === 'C') return '1';
+    if (c === 'B' || c === 'D') return '2';
+  }
+  return '';
+}
+
+// ================================================================
+// 模式 + 欄位定義
 // ================================================================
 const COLUMNS = {
   named: [
     { key: 'no', label: '送驗編號', width: 140, mono: true, required: true, auto: true },
     { key: 'name', label: '姓名', width: 90, required: true },
-    { key: 'birth', label: '出生年月日', width: 110, ph: '60/06/16' },
-    { key: 'id', label: '身分證字號', width: 130, mono: true, ph: 'A123456789', optional: true },
+    { key: 'birth', label: '出生年月日', width: 110, ph: '60/06/16', date: true },
+    { key: 'id', label: '身分證字號', width: 130, mono: true, ph: 'A123456789', optional: true, idCheck: true, upper: true },
     { key: 'sex', label: '性別', width: 70, type: 'sex' },
     { key: 'phone', label: '連絡電話', width: 130 },
-    { key: 'sampleDate', label: '採檢日期', width: 110, default: 'today' }
+    { key: 'sampleDate', label: '採檢日期', width: 110, default: 'today', date: true }
   ],
   anon: [
     { key: 'no', label: '送驗編號', width: 140, mono: true, required: true, auto: true },
     { key: 'consult', label: '諮詢代碼', width: 100, mono: true, required: true },
-    { key: 'birth', label: '出生年月日', width: 110, ph: '60/06/16', optional: true },
+    { key: 'birth', label: '出生年月日', width: 110, ph: '60/06/16', optional: true, date: true },
     { key: 'sex', label: '性別', width: 70, type: 'sex' },
-    { key: 'sampleDate', label: '採檢日期', width: 110, default: 'today' }
+    { key: 'sampleDate', label: '採檢日期', width: 110, default: 'today', date: true }
   ]
 };
-
 let currentMode = 'named';
-
 function getCols() { return COLUMNS[currentMode]; }
 
 // ================================================================
-// 送驗編號自動編碼
+// 自動編號
 // ================================================================
-function nextSerial() {
-  return parseInt($('hdr_no_next').value.trim(), 10) || 1;
-}
-function setNextSerial(n) {
-  $('hdr_no_next').value = String(n).padStart(4, '0');
-  updateNoPreview();
-}
-function buildNo(serial) {
-  return $('hdr_no_prefix').value.trim() + String(serial).padStart(4, '0');
-}
-function updateNoPreview() {
-  $('hdr_no_preview').value = buildNo(nextSerial());
-}
+function nextSerial() { return parseInt($('hdr_no_next').value.trim(), 10) || 1; }
+function setNextSerial(n) { $('hdr_no_next').value = String(n).padStart(4, '0'); updateNoPreview(); }
+function buildNo(s) { return $('hdr_no_prefix').value.trim() + String(s).padStart(4, '0'); }
+function updateNoPreview() { $('hdr_no_preview').value = buildNo(nextSerial()); }
 $('hdr_no_prefix').addEventListener('input', updateNoPreview);
 $('hdr_no_next').addEventListener('input', updateNoPreview);
 
 // ================================================================
-// 表格繪製
+// 表頭/列繪製
 // ================================================================
 function renderHead() {
   const cols = getCols();
@@ -353,30 +389,16 @@ function renderHead() {
   thead.innerHTML = html;
 }
 
-function rebuildTable() {
-  // 收集現有資料
-  const oldRows = collectRows();
-  tbody.innerHTML = '';
-  rowSeq = 0;
-  renderHead();
-  oldRows.forEach(r => addRow(r));
-  if (oldRows.length === 0) addRow();
-  updateEmpty();
-}
-
 let rowSeq = 0;
 
 function addRow(data) {
   data = data || {};
   rowSeq++;
   const cols = getCols();
-
-  // 自動編號
   if (cols.find(c => c.key === 'no') && !data.no) {
     data.no = buildNo(nextSerial());
     setNextSerial(nextSerial() + 1);
   }
-  // 預設值
   cols.forEach(c => {
     if (c.default === 'today' && !data[c.key]) data[c.key] = todayMinguo();
   });
@@ -395,35 +417,36 @@ function addRow(data) {
     } else {
       const cls = 'r-' + c.key + (c.mono ? ' mono' : '');
       const ph = c.ph ? ' placeholder="' + c.ph + '"' : '';
-      html += '<td><input class="' + cls + '" value="' + esc(v) + '"' + ph + '></td>';
+      const attrs = (c.upper ? ' style="text-transform:uppercase"' : '');
+      html += '<td><input class="' + cls + '" value="' + esc(v) + '"' + ph + attrs + '></td>';
     }
   });
   html += '<td class="action"><button title="刪除此列" onclick="this.closest(\'tr\').remove();updateEmpty()">×</button></td>';
   tr.innerHTML = html;
   tbody.appendChild(tr);
   updateEmpty();
+  // 立即驗算 id（若有預設值）
+  const idEl = tr.querySelector('.r-id');
+  if (idEl && idEl.value) validateIdField(idEl);
 }
 
 function esc(v) {
   return String(v == null ? '' : v).replace(/"/g, '&quot;');
 }
-
 function updateEmpty() {
   emptyHint.style.display = tbody.children.length === 0 ? 'block' : 'none';
 }
 
 function collectRows() {
   const cols = getCols();
-  const rows = [];
-  Array.from(tbody.children).forEach((tr, i) => {
+  return Array.from(tbody.children).map((tr, i) => {
     const r = { seq: i + 1 };
     cols.forEach(c => {
       const el = tr.querySelector('.r-' + c.key);
-      if (el) r[c.key] = (c.key === 'id' ? el.value.trim().toUpperCase() : el.value.trim());
+      if (el) r[c.key] = (c.upper ? el.value.trim().toUpperCase() : el.value.trim());
     });
-    rows.push(r);
+    return r;
   });
-  return rows;
 }
 
 function getHeader() {
@@ -437,7 +460,51 @@ function getHeader() {
 }
 
 // ================================================================
-// 鍵盤 Excel-like 操作
+// 即時驗證身分證 + 自動帶性別
+// ================================================================
+function validateIdField(input) {
+  // 移除舊提示
+  const td = input.closest('td');
+  const oldTip = td.querySelector('.tip');
+  if (oldTip) oldTip.remove();
+  input.classList.remove('id-ok', 'id-err');
+
+  const v = input.value.trim().toUpperCase();
+  if (input.value !== v) input.value = v;
+  if (!v) return;
+  if (v.length < 10) return;
+
+  const result = checkId(v);
+  if (result === true) {
+    input.classList.add('id-ok');
+    const tip = document.createElement('span');
+    tip.className = 'tip';
+    tip.textContent = '✓';
+    td.appendChild(tip);
+    // 自動帶性別
+    const g = genderFromId(v);
+    if (g) {
+      const sexEl = input.closest('tr').querySelector('.r-sex');
+      if (sexEl && !sexEl.value) sexEl.value = g;
+    }
+  } else if (result === false) {
+    input.classList.add('id-err');
+    const tip = document.createElement('span');
+    tip.className = 'tip bad';
+    tip.textContent = '✗';
+    td.appendChild(tip);
+  }
+}
+
+// 日期欄 onBlur 智慧轉換
+function smartDateField(input) {
+  const before = input.value;
+  const after = smartDate(before);
+  if (after !== before) input.value = after;
+}
+
+// ================================================================
+// 鍵盤 Excel-like 操作 + Ctrl+D 複製上方
 // ================================================================
 tbody.addEventListener('keydown', function(e) {
   const t = e.target;
@@ -445,6 +512,24 @@ tbody.addEventListener('keydown', function(e) {
   const tr = t.closest('tr');
   const td = t.closest('td');
   const cellIdx = Array.from(tr.children).indexOf(td);
+
+  // Ctrl+D 複製上方格
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+    const prevTr = tr.previousElementSibling;
+    if (prevTr) {
+      const prevEl = prevTr.children[cellIdx]?.querySelector('input, select');
+      if (prevEl) {
+        e.preventDefault();
+        t.value = prevEl.value;
+        if (t.tagName === 'INPUT') {
+          // 觸發欄位事件
+          if (t.classList.contains('r-id')) validateIdField(t);
+        }
+        toast('已複製上方格');
+      }
+    }
+    return;
+  }
 
   if (e.key === 'Enter') {
     e.preventDefault();
@@ -456,27 +541,84 @@ tbody.addEventListener('keydown', function(e) {
     e.preventDefault();
     if (tr.previousElementSibling) moveToCell(tr.previousElementSibling, cellIdx);
   } else if (e.key === 'Tab' && !e.shiftKey) {
-    // Tab on last input of last row → add row
     const allInputs = tbody.querySelectorAll('input, select');
     if (allInputs[allInputs.length - 1] === t) {
       e.preventDefault();
       const newTr = addRowAndReturn();
-      moveToCell(newTr, 1); // 跳到第一個資料欄
+      moveToCell(newTr, 1);
     }
   }
 });
+
+// 欄位事件（focus / blur / input）
+tbody.addEventListener('input', function(e) {
+  const t = e.target;
+  if (t.classList.contains('r-id')) validateIdField(t);
+});
+tbody.addEventListener('blur', function(e) {
+  const t = e.target;
+  if (t.matches('input.r-birth, input.r-sampleDate')) smartDateField(t);
+}, true);
+
+// focus 自動 select
+tbody.addEventListener('focus', function(e) {
+  const t = e.target;
+  if (t.tagName === 'INPUT' && t.select) {
+    setTimeout(() => t.select(), 10);
+  }
+}, true);
 
 function moveToCell(tr, cellIdx) {
   if (!tr) return;
   const td = tr.children[cellIdx];
   if (!td) return;
   const el = td.querySelector('input, select');
-  if (el) { el.focus(); if (el.select) el.select(); }
+  if (el) { el.focus(); }
 }
+function addRowAndReturn() { addRow(); return tbody.lastElementChild; }
 
-function addRowAndReturn() {
-  addRow();
-  return tbody.lastElementChild;
+// ================================================================
+// 整塊貼上：從 Excel 複製多列粘貼
+// ================================================================
+tbody.addEventListener('paste', function(e) {
+  const t = e.target;
+  if (!t.matches('input')) return;
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  if (!text) return;
+  // 多列或多欄才處理；單一值讓瀏覽器原本處理
+  if (!text.includes('\n') && !text.includes('\t')) return;
+  e.preventDefault();
+  pasteAsRows(text, t);
+});
+
+function pasteAsRows(text, startEl) {
+  const lines = text.split(/\r?\n/).filter(l => l !== '');
+  if (lines.length === 0) return;
+  const tr0 = startEl.closest('tr');
+  const td0 = startEl.closest('td');
+  const startCellIdx = Array.from(tr0.children).indexOf(td0);
+
+  let curTr = tr0;
+  let pastedRows = 0;
+  lines.forEach((line, lineIdx) => {
+    if (lineIdx > 0) {
+      if (!curTr.nextElementSibling) addRow();
+      curTr = curTr.nextElementSibling;
+    }
+    const cells = line.split('\t');
+    cells.forEach((val, off) => {
+      const targetTd = curTr.children[startCellIdx + off];
+      if (!targetTd) return;
+      const el = targetTd.querySelector('input, select');
+      if (!el) return;
+      el.value = val.trim();
+      // 自動處理日期 / 身分證
+      if (el.matches('input.r-birth, input.r-sampleDate')) smartDateField(el);
+      if (el.matches('input.r-id')) validateIdField(el);
+    });
+    pastedRows++;
+  });
+  toast('已貼上 ' + pastedRows + ' 列');
 }
 
 // ================================================================
@@ -496,9 +638,16 @@ document.querySelectorAll('#modeSwitch label').forEach(label => {
     rebuildTable();
   });
 });
-
 function hasAnyData() {
   return collectRows().some(r => Object.keys(r).some(k => k !== 'seq' && r[k]));
+}
+function rebuildTable() {
+  const oldRows = collectRows();
+  tbody.innerHTML = '';
+  rowSeq = 0;
+  renderHead();
+  oldRows.forEach(r => addRow(r));
+  if (oldRows.length === 0) addRow();
 }
 
 // ================================================================
@@ -514,13 +663,10 @@ function exportXlsx() {
 
   const wb = XLSX.utils.book_new();
   const yearROC = new Date().getFullYear() - 1911;
-
-  // === Sheet 1: 送驗單（列印紙本）===
   const sheet1Data = [
     [yearROC + '年度臺南市政府衛生局性病檢驗送驗單'],
     ['單位名稱：' + hdr.unit, '', '', '', '', '', '', '', '', '申請單編號：' + hdr.applyNo, '', '', '送驗日期:' + hdr.sendDate]
   ];
-
   if (currentMode === 'named') {
     sheet1Data.push(
       ['號次', '送驗編號', '姓名', '出生\n年月日', '身份證字號', '性別', '', '婚姻', '', '採檢   日期', '連絡電話', '檢驗項目(結果)', '', '', '檢驗\n對象'],
@@ -531,7 +677,6 @@ function exportXlsx() {
       sheet1Data.push([r.seq, r.no, r.name, r.birth, r.id || '', r.sex, '', '', '', r.sampleDate, r.phone, '', '', '', hdr.target]);
     });
   } else {
-    // 匿名
     sheet1Data.push(
       ['號次', '送驗編號', '諮詢代碼', '出生\n年月日', '性別', '採檢\n日期', '檢驗項目(結果)', '', '', '檢驗\n對象'],
       ['', '', '', '', '', '', '梅毒', '愛滋', '', ''],
@@ -544,7 +689,6 @@ function exportXlsx() {
   const sheet1 = XLSX.utils.aoa_to_sheet(sheet1Data);
   XLSX.utils.book_append_sheet(wb, sheet1, '送驗單');
 
-  // === Sheet 2: 醫事檢驗檢體列表（⚡ 系統上傳專用）===
   const sheet2Data = [
     ['申請單位：', hdr.unit],
     ['採樣單位：', hdr.unit],
@@ -568,19 +712,15 @@ function exportXlsx() {
 // ================================================================
 function saveDraft() {
   const draft = {
-    mode: currentMode,
-    header: getHeader(),
-    noPrefix: $('hdr_no_prefix').value,
-    noNext: $('hdr_no_next').value,
-    rows: collectRows(),
-    savedAt: new Date().toISOString()
+    mode: currentMode, header: getHeader(),
+    noPrefix: $('hdr_no_prefix').value, noNext: $('hdr_no_next').value,
+    rows: collectRows(), savedAt: new Date().toISOString()
   };
   try {
     localStorage.setItem('quickInputDraft', JSON.stringify(draft));
-    alert('已儲存暫存（本機 localStorage）');
+    toast('已儲存暫存');
   } catch (e) { alert('儲存失敗：' + e.message); }
 }
-
 function loadDraft() {
   try {
     const raw = localStorage.getItem('quickInputDraft');
@@ -607,8 +747,25 @@ function loadDraft() {
     renderHead();
     (d.rows || []).forEach(r => addRow(r));
     updateNoPreview();
-    alert('已載入暫存（' + (d.savedAt || '?') + '）');
+    toast('已載入暫存（' + (d.savedAt || '?') + '）');
   } catch (e) { alert('載入失敗：' + e.message); }
+}
+
+// ================================================================
+// Toast 提示
+// ================================================================
+let toastTimer;
+function toast(msg) {
+  let el = document.querySelector('.toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'toast';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.style.display = 'none', 1800);
 }
 
 // ================================================================
@@ -616,29 +773,12 @@ function loadDraft() {
 // ================================================================
 $('btnAddRow').addEventListener('click', () => {
   addRow();
-  // focus 新列第一個資料欄
   const lastTr = tbody.lastElementChild;
   if (lastTr) moveToCell(lastTr, 1);
 });
-$('btnAddBatch').addEventListener('click', () => {
-  const cols = getCols().filter(c => c.key !== 'no').map(c => c.label).join('、');
-  const txt = prompt('每行一筆，用 Tab 或逗號分隔欄位：\n' + cols);
-  if (!txt) return;
-  txt.split(/\r?\n/).forEach(line => {
-    const c = line.split(/\t|,/);
-    if (c.length < 1 || !c[0].trim()) return;
-    const data = {};
-    getCols().filter(x => x.key !== 'no').forEach((col, idx) => {
-      data[col.key] = (c[idx] || '').trim();
-    });
-    addRow(data);
-  });
-});
 $('btnClear').addEventListener('click', () => {
   if (confirm('確定清空所有資料？')) {
-    tbody.innerHTML = '';
-    rowSeq = 0;
-    updateEmpty();
+    tbody.innerHTML = ''; rowSeq = 0; updateEmpty();
   }
 });
 $('btnExport').addEventListener('click', exportXlsx);
