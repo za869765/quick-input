@@ -172,7 +172,6 @@
   <h2 onclick="document.getElementById('panelHdr').classList.toggle('collapsed')">送驗單抬頭 <span class="toggle-icon">▼</span></h2>
   <div class="form-row">
     <label><span>單位名稱</span><input id="hdr_unit" value="佳里區衛生所"></label>
-    <label><span>申請單編號</span><input id="hdr_apply_no" placeholder="O114S00xxx"></label>
     <label><span>送驗日期 (民國)</span><input id="hdr_send_date"></label>
     <label><span>送驗原因（選填，當檔名）</span><input id="hdr_reason" placeholder="例：金唐殿外展、官田軍營"></label>
     <label><span>檢驗對象代碼</span>
@@ -227,7 +226,7 @@
 </div>
 
 </div>
-<div class="ver">v0.1.12</div>
+<div class="ver">v0.1.13</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -539,7 +538,7 @@ function collectRows() {
 function getHeader() {
   return {
     unit: $('hdr_unit').value.trim(),
-    applyNo: $('hdr_apply_no').value.trim(),
+    applyNo: '', // 系統產出，不再由 user 輸入
     sendDate: $('hdr_send_date').value.trim(),
     reason: $('hdr_reason').value.trim(),
     target: $('hdr_target').value
@@ -788,7 +787,7 @@ function exportXlsx() {
   const yearROC = new Date().getFullYear() - 1911;
   const sheet1Data = [
     [yearROC + '年度臺南市政府衛生局性病檢驗送驗單'],
-    ['單位名稱：' + hdr.unit, '', '', '', '', '', '', '', '', '申請單編號：' + hdr.applyNo, '', '', '送驗日期:' + hdr.sendDate]
+    ['單位名稱：' + hdr.unit, '', '', '', '', '', '', '', '', '', '', '', '送驗日期:' + hdr.sendDate]
   ];
   if (currentMode === 'named') {
     sheet1Data.push(
@@ -827,7 +826,7 @@ function exportXlsx() {
   const sheet2 = XLSX.utils.aoa_to_sheet(sheet2Data);
   XLSX.utils.book_append_sheet(wb, sheet2, '醫事檢驗檢體列表');
 
-  // 檔名：日期 + 送驗原因（若有填）+ 送驗（如 1150505金唐殿外展送驗.xlsx）
+  // 檔名：日期 + 送驗原因（若有填）+ 具/匿篩送驗
   const dateStr = (hdr.sendDate || todayMinguo()).replace(/\//g, '');
   const reason = hdr.reason ? hdr.reason.replace(/[\\/:*?"<>|]/g, '') : '';
   const tail = (currentMode === 'named' ? '具篩' : '匿篩') + '送驗';
@@ -867,7 +866,6 @@ function tryAutoLoad() {
     }
     if (d.header) {
       $('hdr_unit').value = d.header.unit || '';
-      $('hdr_apply_no').value = d.header.applyNo || '';
       $('hdr_send_date').value = d.header.sendDate || '';
       $('hdr_reason').value = d.header.reason || '';
       $('hdr_target').value = d.header.target || '';
