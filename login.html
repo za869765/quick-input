@@ -32,6 +32,29 @@
   body::before { width: 400px; height: 400px; top: -100px; right: -100px; }
   body::after { width: 300px; height: 300px; bottom: -80px; left: -80px; animation-delay: -10s; }
 
+  /* 紅絲帶 LOGO（HIV/AIDS 公益象徵）*/
+  .ribbon-bg {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 480px;
+    height: 660px;
+    transform: translate(-50%, -50%);
+    opacity: 0.18;
+    z-index: 1;
+    pointer-events: none;
+    animation: ribbonFade 3s ease-out, ribbonFloat 10s ease-in-out infinite alternate;
+    filter: drop-shadow(0 10px 30px rgba(0,0,0,0.3));
+  }
+  @keyframes ribbonFade {
+    from { opacity: 0; transform: translate(-50%, -40%) scale(0.9); }
+    to { opacity: 0.18; transform: translate(-50%, -50%) scale(1); }
+  }
+  @keyframes ribbonFloat {
+    from { transform: translate(-50%, -50%) rotate(-3deg); }
+    to { transform: translate(-50%, -52%) rotate(3deg); }
+  }
+
   @keyframes gradient {
     0%, 100% { background-position: 0% 50%; }
     50% { background-position: 100% 50%; }
@@ -161,6 +184,40 @@
 </style>
 </head>
 <body>
+
+<!-- 紅絲帶背景 LOGO -->
+<svg class="ribbon-bg" viewBox="0 0 100 140" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <linearGradient id="ribGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ef5350"/>
+      <stop offset="60%" stop-color="#c62828"/>
+      <stop offset="100%" stop-color="#7a0e0e"/>
+    </linearGradient>
+    <linearGradient id="ribShine" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0)"/>
+      <stop offset="50%" stop-color="rgba(255,255,255,0.3)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </linearGradient>
+  </defs>
+  <g>
+    <!-- 後條（左下擺，較暗）-->
+    <path d="M 38,60 L 25,128 L 33,135 L 50,75 Z" fill="#7a0e0e"/>
+    <!-- 前條（右下擺）-->
+    <path d="M 62,60 L 75,128 L 67,135 L 50,75 Z" fill="url(#ribGrad)"/>
+    <!-- 頂部彎環 -->
+    <path d="M 50,8
+             C 30,20 30,40 38,60
+             L 50,75
+             L 62,60
+             C 70,40 70,20 50,8 Z"
+          fill="url(#ribGrad)"/>
+    <!-- 反光高亮 -->
+    <path d="M 45,15 C 35,25 35,45 42,58 L 48,68 L 50,72 L 48,55 C 41,42 41,28 47,17 Z"
+          fill="url(#ribShine)" opacity="0.5"/>
+    <!-- 中央交叉陰影 -->
+    <ellipse cx="50" cy="73" rx="6" ry="3" fill="#5a0808" opacity="0.6"/>
+  </g>
+</svg>
 
 <form class="card" id="loginForm" autocomplete="off">
   <div class="lock-icon">🔒</div>
