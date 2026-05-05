@@ -87,6 +87,8 @@
     width: 24px; height: 24px; font-size: 16px; cursor: pointer; border-radius: 4px;
   }
   tbody td.action button:hover { background: #ffebee; }
+  /* 性別欄被鎖定（從身分證自動帶） */
+  tbody td select.locked { background: #e8f5e9 !important; color: #2e7d32; cursor: not-allowed; }
 
   /* tooltip on validation */
   tbody td .tip {
@@ -189,7 +191,7 @@
   </h2>
 
   <div class="actions">
-    <button class="btn btn-primary" id="btnAddRow">+ 新增一列</button>
+    <button class="btn btn-secondary" id="btnAdd5">+ 加 5 列</button>
     <button class="btn btn-secondary" id="btnLoadDraft">載入暫存</button>
     <button class="btn btn-danger" id="btnClear">清空</button>
   </div>
@@ -215,7 +217,7 @@
 </div>
 
 </div>
-<div class="ver">v0.1.5</div>
+<div class="ver">v0.1.6</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -347,20 +349,19 @@ function genderFromId(id) {
 // ================================================================
 const COLUMNS = {
   named: [
-    { key: 'no', label: '送驗編號', width: 140, mono: true, required: true, auto: true },
-    { key: 'name', label: '姓名', width: 90, required: true },
-    { key: 'birth', label: '出生年月日', width: 110, ph: '60/06/16', date: true },
-    { key: 'id', label: '身分證字號', width: 130, mono: true, ph: 'A123456789', optional: true, idCheck: true, upper: true },
-    { key: 'sex', label: '性別', width: 70, type: 'sex' },
-    { key: 'phone', label: '連絡電話', width: 130 },
-    { key: 'sampleDate', label: '採檢日期', width: 110, default: 'today', date: true }
+    { key: 'no', label: '送驗編號', width: 140, mono: true, auto: true },
+    { key: 'name', label: '姓名', width: 100, required: true },
+    { key: 'birth', label: '出生年月日', width: 130, ph: '600616 或 60/06/16', required: true, date: true },
+    { key: 'id', label: '身分證字號', width: 140, mono: true, ph: '可空', optional: true, idCheck: true, upper: true },
+    { key: 'sex', label: '性別', width: 90, type: 'sex' },
+    { key: 'sampleDate', label: '採檢日期', width: 110, default: 'today', date: true, optional: true }
   ],
   anon: [
-    { key: 'no', label: '送驗編號', width: 140, mono: true, required: true, auto: true },
-    { key: 'consult', label: '諮詢代碼', width: 100, mono: true, required: true },
-    { key: 'birth', label: '出生年月日', width: 110, ph: '60/06/16', optional: true, date: true },
-    { key: 'sex', label: '性別', width: 70, type: 'sex' },
-    { key: 'sampleDate', label: '採檢日期', width: 110, default: 'today', date: true }
+    { key: 'no', label: '送驗編號', width: 140, mono: true, auto: true },
+    { key: 'consult', label: '諮詢代碼', width: 110, mono: true, required: true },
+    { key: 'birth', label: '出生年月日', width: 130, ph: '600616', optional: true, date: true },
+    { key: 'sex', label: '性別', width: 90, type: 'sex' },
+    { key: 'sampleDate', label: '採檢日期', width: 110, default: 'today', date: true, optional: true }
   ]
 };
 let currentMode = 'named';
@@ -465,7 +466,6 @@ function getHeader() {
 // 即時驗證身分證 + 自動帶性別
 // ================================================================
 function validateIdField(input) {
-  // 移除舊提示
   const td = input.closest('td');
   const oldTip = td.querySelector('.tip');
   if (oldTip) oldTip.remove();
@@ -473,8 +473,17 @@ function validateIdField(input) {
 
   const v = input.value.trim().toUpperCase();
   if (input.value !== v) input.value = v;
-  if (!v) return;
-  if (v.length < 10) return;
+  const tr = input.closest('tr');
+  const sexEl = tr ? tr.querySelector('.r-sex') : null;
+
+  if (!v || v.length < 10) {
+    // 空白或不完整 → 解鎖性別欄
+    if (sexEl) {
+      sexEl.disabled = false;
+      sexEl.classList.remove('locked');
+    }
+    return;
+  }
 
   const result = checkId(v);
   if (result === true) {
@@ -483,11 +492,12 @@ function validateIdField(input) {
     tip.className = 'tip';
     tip.textContent = '✓';
     td.appendChild(tip);
-    // 自動帶性別
+    // 自動帶性別 + 鎖定
     const g = genderFromId(v);
-    if (g) {
-      const sexEl = input.closest('tr').querySelector('.r-sex');
-      if (sexEl && !sexEl.value) sexEl.value = g;
+    if (g && sexEl) {
+      sexEl.value = g;
+      sexEl.disabled = true;
+      sexEl.classList.add('locked');
     }
   } else if (result === false) {
     input.classList.add('id-err');
@@ -495,6 +505,11 @@ function validateIdField(input) {
     tip.className = 'tip bad';
     tip.textContent = '✗';
     td.appendChild(tip);
+    // 不可識別 → 解鎖讓使用者手選
+    if (sexEl) {
+      sexEl.disabled = false;
+      sexEl.classList.remove('locked');
+    }
   }
 }
 
@@ -657,9 +672,13 @@ function rebuildTable() {
 // ================================================================
 function exportXlsx() {
   const hdr = getHeader();
-  const rows = collectRows();
-  if (rows.length === 0 || rows.every(r => !r.no && !r.name && !r.consult)) {
-    alert('請先輸入至少一筆個案資料');
+  let rows = collectRows();
+  // v0.1.6：自動 filter 空列（沒姓名 + 沒身分證 + 沒諮詢代碼 → 跳過）
+  rows = rows.filter(r => r.name || r.id || r.consult);
+  // 重新編號
+  rows.forEach((r, i) => r.seq = i + 1);
+  if (rows.length === 0) {
+    alert('請先輸入至少一筆個案資料（姓名/身分證/諮詢代碼任一）');
     return;
   }
 
@@ -671,12 +690,12 @@ function exportXlsx() {
   ];
   if (currentMode === 'named') {
     sheet1Data.push(
-      ['號次', '送驗編號', '姓名', '出生\n年月日', '身份證字號', '性別', '', '婚姻', '', '採檢   日期', '連絡電話', '檢驗項目(結果)', '', '', '檢驗\n對象'],
-      ['', '', '', '', '', '', '', '', '', '', '', '梅毒', '愛滋', '', ''],
-      ['', '', '', '', '', '1.男\n2.女', '', '已', '未', '', '', '梅毒血清抗體檢驗\n快速血漿反應素(RPR)', '化學冷光法\n(Combo Ab+Ag)', '免疫層析法', '']
+      ['號次', '送驗編號', '姓名', '出生\n年月日', '身份證字號', '性別', '', '婚姻', '', '採檢   日期', '檢驗項目(結果)', '', '', '檢驗\n對象'],
+      ['', '', '', '', '', '', '', '', '', '', '梅毒', '愛滋', '', ''],
+      ['', '', '', '', '', '1.男\n2.女', '', '已', '未', '', '梅毒血清抗體檢驗\n快速血漿反應素(RPR)', '化學冷光法\n(Combo Ab+Ag)', '免疫層析法', '']
     );
     rows.forEach(r => {
-      sheet1Data.push([r.seq, r.no, r.name, r.birth, r.id || '', r.sex, '', '', '', r.sampleDate, r.phone, '', '', '', hdr.target]);
+      sheet1Data.push([r.seq, r.no, r.name, r.birth, r.id || '', r.sex, '', '', '', r.sampleDate, '', '', '', hdr.target]);
     });
   } else {
     sheet1Data.push(
@@ -777,10 +796,8 @@ function toast(msg) {
 // ================================================================
 // 事件
 // ================================================================
-$('btnAddRow').addEventListener('click', () => {
-  addRow();
-  const lastTr = tbody.lastElementChild;
-  if (lastTr) moveToCell(lastTr, 1);
+$('btnAdd5').addEventListener('click', () => {
+  for (let i = 0; i < 5; i++) addRow();
 });
 $('btnClear').addEventListener('click', () => {
   if (confirm('確定清空所有資料？')) {
@@ -810,7 +827,13 @@ $('hdr_send_date').value = todayMinguo();
 checkYearReset();
 updateNoPreview();
 renderHead();
-addRow();
+// v0.1.6：預設帶 10 列空白可直接連續打
+for (let i = 0; i < 10; i++) addRow();
+// 進場 focus 第一列姓名格
+setTimeout(() => {
+  const firstTr = tbody.children[0];
+  if (firstTr) moveToCell(firstTr, 2); // idx 2 = 姓名
+}, 100);
 </script>
 
 </body>
