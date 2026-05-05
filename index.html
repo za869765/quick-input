@@ -17,7 +17,6 @@
   .wrap { max-width: 1400px; margin: 0 auto; }
   h1 { color: #1a73e8; margin: 0 0 6px; font-size: 22px; }
   .hint { color: #6c757d; font-size: 13px; margin-bottom: 14px; }
-
   .panel {
     background: #fff;
     border-radius: 10px;
@@ -32,7 +31,6 @@
     border-bottom: 1px solid #e8f0fe;
     padding-bottom: 6px;
   }
-
   .form-row {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -61,37 +59,23 @@
     outline: none;
     box-shadow: 0 0 0 3px rgba(26,115,232,0.15);
   }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td {
-    padding: 6px 8px;
+    padding: 6px 6px;
     border-bottom: 1px solid #eef2f7;
     text-align: left;
     vertical-align: top;
   }
-  th {
-    background: #f8f9fa;
-    font-weight: 600;
-    font-size: 12px;
-    color: #495057;
-  }
+  th { background: #f8f9fa; font-weight: 600; font-size: 12px; color: #495057; }
   td input, td select {
     width: 100%;
-    padding: 5px 8px;
-    font-size: 13px;
+    padding: 5px 6px;
+    font-size: 12.5px;
     border: 1px solid #d0d7de;
+    border-radius: 4px;
   }
-
-  .actions {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin: 14px 0;
-  }
+  td .auto-no { background: #f0f4ff; font-family: Consolas, monospace; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0; }
   button {
     padding: 9px 16px;
     border-radius: 6px;
@@ -105,15 +89,15 @@
   .btn-primary:hover { background: #0d47a1; }
   .btn-secondary { background: #e9ecef; color: #495057; }
   .btn-secondary:hover { background: #d0d7de; }
-  .btn-danger { background: #fff; color: #c62828; border: 1px solid #ffcdd2; }
+  .btn-danger { background: #fff; color: #c62828; border: 1px solid #ffcdd2; padding: 4px 10px; }
   .btn-danger:hover { background: #ffebee; }
-
   .placeholder {
     text-align: center;
     color: #9aa3ad;
     padding: 28px;
     font-size: 14px;
   }
+  .ver { position: fixed; right: 12px; bottom: 12px; background: #1a73e8; color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 11.5px; font-family: Consolas, monospace; }
 </style>
 </head>
 <body>
@@ -121,8 +105,7 @@
 <div class="wrap">
 
 <h1>送驗單快速輸入器</h1>
-<div class="hint">輸入個資後產出送驗單 XLSX（含 列印分頁 + 系統上傳分頁）。<br>
-版本：v0.1.0 草稿（功能尚在搭建）</div>
+<div class="hint">輸入個資後產出送驗單 XLSX（含 列印分頁 + 系統上傳分頁）</div>
 
 <!-- 表單：送驗單抬頭 -->
 <div class="panel">
@@ -147,6 +130,17 @@
   </div>
 </div>
 
+<!-- 送驗編號自動編碼 -->
+<div class="panel">
+  <h2>送驗編號自動編碼</h2>
+  <div class="form-row">
+    <label><span>年度區碼（前段）</span><input id="hdr_no_prefix" value="1140505" style="font-family:Consolas,monospace"></label>
+    <label><span>下一筆流水號（4 位）</span><input id="hdr_no_next" value="0001" style="font-family:Consolas,monospace"></label>
+    <label><span>預覽下一筆送驗編號</span><input id="hdr_no_preview" readonly style="background:#f0f4ff;font-family:Consolas,monospace;font-weight:600"></label>
+  </div>
+  <div class="hint" style="margin:0">送驗編號 = 年度區碼 + 4 位流水號（如 <code>1140505</code> + <code>0942</code> → <code>11405050942</code>）。新增列時自動帶入並 +1。</div>
+</div>
+
 <!-- 個案清單 -->
 <div class="panel">
   <h2>個案清單（可批次新增）</h2>
@@ -159,14 +153,15 @@
   <table id="dataTable">
     <thead>
       <tr>
-        <th style="width:36px">#</th>
-        <th>送驗編號</th>
-        <th>姓名</th>
-        <th>出生年月日</th>
-        <th>身分證字號</th>
-        <th style="width:60px">性別</th>
-        <th>連絡電話</th>
-        <th style="width:60px"></th>
+        <th style="width:30px">#</th>
+        <th style="width:130px">送驗編號</th>
+        <th style="width:90px">姓名</th>
+        <th style="width:100px">出生年月日</th>
+        <th style="width:120px">身分證字號</th>
+        <th style="width:50px">性別</th>
+        <th style="width:120px">連絡電話</th>
+        <th style="width:100px">採檢日期</th>
+        <th style="width:40px"></th>
       </tr>
     </thead>
     <tbody id="dataTbody"></tbody>
@@ -183,42 +178,88 @@
   </div>
   <div class="hint" style="margin-top:8px">
     產出 XLSX 包含兩個分頁：<br>
-    1. <strong>送驗單</strong>（列印紙本用）<br>
+    1. <strong>送驗單</strong>（列印紙本）<br>
     2. <strong>醫事檢驗檢體列表</strong>（⚡ 系統上傳用）
   </div>
 </div>
 
 </div><!-- /.wrap -->
+<div class="ver">v0.1.1</div>
 
 <script>
-// ================================================================
-// 送驗單快速輸入器 v0.1.0
-// ================================================================
-
 const $ = (id) => document.getElementById(id);
 const tbody = $('dataTbody');
 const emptyHint = $('emptyHint');
 
+// ================================================================
+// 民國日期工具
+// ================================================================
+function todayMinguo() {
+  const d = new Date();
+  return (d.getFullYear() - 1911) + '/' +
+    String(d.getMonth() + 1).padStart(2, '0') + '/' +
+    String(d.getDate()).padStart(2, '0');
+}
+
+// ================================================================
+// 送驗編號自動編碼
+// ================================================================
+function nextSerial() {
+  const v = $('hdr_no_next').value.trim();
+  return parseInt(v, 10) || 1;
+}
+function setNextSerial(n) {
+  $('hdr_no_next').value = String(n).padStart(4, '0');
+  updateNoPreview();
+}
+function buildNo(serial) {
+  const prefix = $('hdr_no_prefix').value.trim();
+  return prefix + String(serial).padStart(4, '0');
+}
+function updateNoPreview() {
+  $('hdr_no_preview').value = buildNo(nextSerial());
+}
+$('hdr_no_prefix').addEventListener('input', updateNoPreview);
+$('hdr_no_next').addEventListener('input', updateNoPreview);
+
+// ================================================================
+// 表格
+// ================================================================
 let rowSeq = 0;
 
 function addRow(data) {
   data = data || {};
   rowSeq++;
+
+  // 自動編號（若 data.no 沒帶值）
+  if (!data.no) {
+    data.no = buildNo(nextSerial());
+    setNextSerial(nextSerial() + 1);
+  }
+  // 採檢日期預設當天
+  if (!data.sampleDate) data.sampleDate = todayMinguo();
+
   const tr = document.createElement('tr');
   tr.dataset.idx = rowSeq;
   tr.innerHTML =
     '<td>' + rowSeq + '</td>' +
-    '<td><input class="r-no" value="' + (data.no || '') + '" placeholder="11405xxxxx"></td>' +
-    '<td><input class="r-name" value="' + (data.name || '') + '"></td>' +
-    '<td><input class="r-birth" value="' + (data.birth || '') + '" placeholder="60/06/16"></td>' +
-    '<td><input class="r-id" value="' + (data.id || '') + '" placeholder="A123456789" style="font-family:Consolas,monospace"></td>' +
-    '<td><select class="r-sex"><option value="">—</option><option value="1"' + (data.sex==='1'?' selected':'') + '>1男</option><option value="2"' + (data.sex==='2'?' selected':'') + '>2女</option></select></td>' +
-    '<td><input class="r-phone" value="' + (data.phone || '') + '"></td>' +
+    '<td><input class="r-no auto-no" value="' + esc(data.no) + '"></td>' +
+    '<td><input class="r-name" value="' + esc(data.name) + '"></td>' +
+    '<td><input class="r-birth" value="' + esc(data.birth) + '" placeholder="60/06/16"></td>' +
+    '<td><input class="r-id" value="' + esc(data.id) + '" placeholder="A123456789" style="font-family:Consolas,monospace"></td>' +
+    '<td><select class="r-sex"><option value="">—</option>' +
+        '<option value="1"' + (data.sex==='1'?' selected':'') + '>1男</option>' +
+        '<option value="2"' + (data.sex==='2'?' selected':'') + '>2女</option></select></td>' +
+    '<td><input class="r-phone" value="' + esc(data.phone) + '"></td>' +
+    '<td><input class="r-date" value="' + esc(data.sampleDate) + '"></td>' +
     '<td><button class="btn-danger" onclick="this.closest(\'tr\').remove();updateEmpty()">×</button></td>';
   tbody.appendChild(tr);
   updateEmpty();
 }
 
+function esc(v) {
+  return String(v == null ? '' : v).replace(/"/g, '&quot;');
+}
 function updateEmpty() {
   emptyHint.style.display = tbody.children.length === 0 ? 'block' : 'none';
 }
@@ -233,7 +274,8 @@ function collectRows() {
       birth: tr.querySelector('.r-birth').value.trim(),
       id: tr.querySelector('.r-id').value.trim().toUpperCase(),
       sex: tr.querySelector('.r-sex').value,
-      phone: tr.querySelector('.r-phone').value.trim()
+      phone: tr.querySelector('.r-phone').value.trim(),
+      sampleDate: tr.querySelector('.r-date').value.trim()
     });
   });
   return rows;
@@ -261,17 +303,18 @@ function exportXlsx() {
   }
 
   const wb = XLSX.utils.book_new();
+  const yearROC = new Date().getFullYear() - 1911;
 
   // === Sheet 1: 送驗單（列印紙本）===
   const sheet1Data = [
-    [hdr.unit ? (new Date().getFullYear() - 1911) + '年度臺南市政府衛生局性病檢驗送驗單' : ''],
+    [yearROC + '年度臺南市政府衛生局性病檢驗送驗單'],
     ['單位名稱：' + hdr.unit, '', '', '', '', '', '', '', '', '申請單編號：' + hdr.applyNo, '', '', '送驗日期:' + hdr.sendDate],
     ['號次', '送驗編號', '姓名', '出生\n年月日', '身份證字號', '性別', '', '婚姻', '', '採檢   日期', '連絡電話', '檢驗項目(結果)', '', '', '檢驗\n對象'],
     ['', '', '', '', '', '', '', '', '', '', '', '梅毒', '愛滋', '', ''],
     ['', '', '', '', '', '1.男\n2.女', '', '已', '未', '', '', '梅毒血清抗體檢驗\n快速血漿反應素(RPR)', '化學冷光法\n(Combo Ab+Ag)', '免疫層析法', ''],
   ];
   rows.forEach(r => {
-    sheet1Data.push([r.seq, r.no, r.name, r.birth, r.id, r.sex, '', '', '', hdr.sendDate, r.phone, '', '', '', hdr.target]);
+    sheet1Data.push([r.seq, r.no, r.name, r.birth, r.id, r.sex, '', '', '', r.sampleDate, r.phone, '', '', '', hdr.target]);
   });
   const sheet1 = XLSX.utils.aoa_to_sheet(sheet1Data);
   XLSX.utils.book_append_sheet(wb, sheet1, '送驗單');
@@ -285,22 +328,23 @@ function exportXlsx() {
     ['樣品編號', '樣品名稱', '製造日期', '有效日期', '採樣日期', '檢驗成分編號列表'],
   ];
   rows.forEach(r => {
-    sheet2Data.push([r.no, r.name, hdr.sendDate, '', hdr.sendDate, 'S1-HIV02']);
+    sheet2Data.push([r.no, r.name, r.sampleDate, '', r.sampleDate, 'S1-HIV02']);
   });
   const sheet2 = XLSX.utils.aoa_to_sheet(sheet2Data);
   XLSX.utils.book_append_sheet(wb, sheet2, '醫事檢驗檢體列表');
 
-  // 下載
   const filename = (hdr.applyNo || ('送驗單_' + new Date().toISOString().slice(0,10))) + '.xlsx';
   XLSX.writeFile(wb, filename);
 }
 
 // ================================================================
-// 暫存（localStorage）
+// 暫存
 // ================================================================
 function saveDraft() {
   const draft = {
     header: getHeader(),
+    noPrefix: $('hdr_no_prefix').value,
+    noNext: $('hdr_no_next').value,
     rows: collectRows(),
     savedAt: new Date().toISOString()
   };
@@ -324,9 +368,12 @@ function loadDraft() {
       $('hdr_reason').value = d.header.reason || '';
       $('hdr_target').value = d.header.target || '';
     }
+    if (d.noPrefix) $('hdr_no_prefix').value = d.noPrefix;
+    if (d.noNext) $('hdr_no_next').value = d.noNext;
     tbody.innerHTML = '';
     rowSeq = 0;
     (d.rows || []).forEach(r => addRow(r));
+    updateNoPreview();
     alert('已載入暫存（' + (d.savedAt || '?') + '）');
   } catch (e) {
     alert('載入失敗：' + e.message);
@@ -338,12 +385,12 @@ function loadDraft() {
 // ================================================================
 $('btnAddRow').addEventListener('click', () => addRow());
 $('btnAddBatch').addEventListener('click', () => {
-  const txt = prompt('每行一筆，欄位用 Tab 分隔：送驗編號\\t姓名\\t出生\\t身分證\\t性別\\t電話');
+  const txt = prompt('每行一筆，欄位用 Tab 或逗號分隔：\n姓名\\t出生\\t身分證\\t性別\\t電話');
   if (!txt) return;
   txt.split(/\r?\n/).forEach(line => {
     const c = line.split(/\t|,/);
-    if (c.length < 2) return;
-    addRow({ no: c[0], name: c[1], birth: c[2], id: c[3], sex: c[4], phone: c[5] });
+    if (c.length < 1 || !c[0].trim()) return;
+    addRow({ name: c[0], birth: c[1], id: c[2], sex: c[3], phone: c[4] });
   });
 });
 $('btnClear').addEventListener('click', () => {
@@ -357,8 +404,10 @@ $('btnExport').addEventListener('click', exportXlsx);
 $('btnSaveDraft').addEventListener('click', saveDraft);
 $('btnLoadDraft').addEventListener('click', loadDraft);
 
-// 起始空白列
-addRow();
+// 起始
+$('hdr_send_date').value = todayMinguo(); // 預設送驗日期 = 今天
+updateNoPreview();
+addRow(); // 起始空白列
 </script>
 
 </body>
