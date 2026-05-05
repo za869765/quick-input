@@ -227,7 +227,7 @@
 </div>
 
 </div>
-<div class="ver">v0.1.11</div>
+<div class="ver">v0.1.12</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -744,14 +744,11 @@ document.querySelectorAll('#modeSwitch label').forEach(label => {
   label.addEventListener('click', function() {
     if (this.classList.contains('active')) return;
     const newMode = this.dataset.mode;
-    if (tbody.children.length > 1 && hasAnyData()) {
-      if (!confirm('切換模式會清空目前清單。流水號會保留，繼續編號。確定切換到「' + (newMode === 'named' ? '具名' : '匿名') + '送驗」？')) return;
-    }
     document.querySelectorAll('#modeSwitch label').forEach(x => x.classList.remove('active'));
     this.classList.add('active');
     this.querySelector('input').checked = true;
     currentMode = newMode;
-    // 切換時清空表格但保留流水號
+    // v0.1.12：直接切換，不彈窗。清空表格但保留流水號
     tbody.innerHTML = '';
     rowSeq = 0;
     renderHead();
