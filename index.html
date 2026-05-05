@@ -152,7 +152,7 @@
     <label><span>單位名稱</span><input id="hdr_unit" value="佳里區衛生所"></label>
     <label><span>申請單編號</span><input id="hdr_apply_no" placeholder="O114S00xxx"></label>
     <label><span>送驗日期 (民國)</span><input id="hdr_send_date"></label>
-    <label><span>送驗原因</span><input id="hdr_reason" placeholder="愛滋篩檢"></label>
+    <label><span>送驗原因（選填，當檔名）</span><input id="hdr_reason" placeholder="例：金唐殿外展、官田軍營"></label>
     <label><span>檢驗對象代碼</span>
       <select id="hdr_target">
         <option value="">— 請選擇 —</option>
@@ -172,7 +172,7 @@
 <div class="panel">
   <h2>送驗編號自動編碼</h2>
   <div class="form-row">
-    <label><span>年度區碼（前段）</span><input id="hdr_no_prefix" value="1140505" class="mono" style="font-family:Consolas,monospace"></label>
+    <label><span>年度區碼（前段）</span><input id="hdr_no_prefix" class="mono" style="font-family:Consolas,monospace"></label>
     <label><span>下一筆流水號（4 位）</span><input id="hdr_no_next" value="0001" style="font-family:Consolas,monospace"></label>
     <label><span>預覽下一筆送驗編號</span><input id="hdr_no_preview" readonly style="background:#f0f4ff;font-family:Consolas,monospace;font-weight:600"></label>
   </div>
@@ -187,15 +187,6 @@
       <label data-mode="anon"><input type="radio" name="mode" value="anon">匿名送驗</label>
     </span>
   </h2>
-
-  <div class="superpowers">
-    🚀 <strong>超能力</strong>：
-    <kbd>身分證</kbd>輸入 10 碼自動驗算 + 帶性別 ｜
-    <kbd>日期欄</kbd>打 <code>0828</code> 變 <code>今年/08/28</code>，<code>60616</code> 變 <code>60/06/16</code>，<code>t</code>=今天 ｜
-    <kbd>Ctrl+D</kbd> 複製上方格 ｜
-    從 Excel 複製多列直接 <kbd>Ctrl+V</kbd> 貼進來 ｜
-    <kbd>Tab/Enter</kbd> 跳格、最後格自動加列
-  </div>
 
   <div class="actions">
     <button class="btn btn-primary" id="btnAddRow">+ 新增一列</button>
@@ -224,7 +215,7 @@
 </div>
 
 </div>
-<div class="ver">v0.1.3</div>
+<div class="ver">v0.1.4</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -703,7 +694,11 @@ function exportXlsx() {
   const sheet2 = XLSX.utils.aoa_to_sheet(sheet2Data);
   XLSX.utils.book_append_sheet(wb, sheet2, '醫事檢驗檢體列表');
 
-  const filename = (hdr.applyNo || ('送驗單_' + new Date().toISOString().slice(0,10))) + '.xlsx';
+  // 檔名：日期 + 送驗原因（若有填）+ 送驗（如 1150505金唐殿外展送驗.xlsx）
+  const dateStr = (hdr.sendDate || todayMinguo()).replace(/\//g, '');
+  const reason = hdr.reason ? hdr.reason.replace(/[\\/:*?"<>|]/g, '') : '';
+  const tail = (currentMode === 'named' ? '具篩' : '匿篩') + '送驗';
+  const filename = dateStr + reason + tail + '.xlsx';
   XLSX.writeFile(wb, filename);
 }
 
@@ -785,8 +780,23 @@ $('btnExport').addEventListener('click', exportXlsx);
 $('btnSaveDraft').addEventListener('click', saveDraft);
 $('btnLoadDraft').addEventListener('click', loadDraft);
 
-// 起始
+// 起始：年度區碼預設「當前民國年 + 0505」（衛生所固定 05），跨年自動重置流水號
+function defaultPrefix() {
+  return String(new Date().getFullYear() - 1911) + '0505';
+}
+function checkYearReset() {
+  // 從 localStorage 讀上次使用的年度，若不同則重置流水號
+  const lastYear = localStorage.getItem('quickInputLastYear');
+  const curYear = String(new Date().getFullYear() - 1911);
+  if (lastYear && lastYear !== curYear) {
+    setNextSerial(1);
+    toast('偵測到跨年，流水號已重置為 0001');
+  }
+  localStorage.setItem('quickInputLastYear', curYear);
+}
+$('hdr_no_prefix').value = defaultPrefix();
 $('hdr_send_date').value = todayMinguo();
+checkYearReset();
 updateNoPreview();
 renderHead();
 addRow();
