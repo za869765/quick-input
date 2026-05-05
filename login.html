@@ -143,36 +143,45 @@
     40%,80% { transform: translateX(8px); }
   }
 
-  button {
-    width: 100%;
-    padding: 14px;
-    background: rgba(255,255,255,0.95);
-    color: #764ba2;
-    border: none;
-    border-radius: 12px;
-    font-size: 16px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: inherit;
-    box-shadow: 0 6px 16px rgba(0,0,0,0.15);
-  }
-  button:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(0,0,0,0.2); }
-  button:active { transform: translateY(0); }
-  button:disabled { opacity: 0.6; cursor: wait; }
-
-  .err {
-    margin-top: 12px;
-    padding: 10px 14px;
-    background: rgba(255,82,82,0.92);
-    color: #fff;
-    border-radius: 10px;
-    font-size: 13px;
+  .status {
+    margin-top: 16px;
     text-align: center;
-    display: none;
+    font-size: 13px;
+    color: rgba(255,255,255,0.85);
+    min-height: 22px;
+    transition: all 0.3s;
+  }
+  .status.checking { color: rgba(255,255,255,0.9); }
+  .status.ok {
+    color: #4caf50;
+    background: rgba(255,255,255,0.95);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-weight: 700;
     animation: slideUp 0.3s;
   }
-  .err.show { display: block; }
+  .status.bad {
+    color: #fff;
+    background: rgba(255,82,82,0.92);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-weight: 600;
+    animation: slideUp 0.3s;
+  }
+  .pulse-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    background: rgba(255,255,255,0.7);
+    border-radius: 50%;
+    margin: 0 2px;
+    animation: pulseDot 1.2s ease-in-out infinite;
+  }
+  .pulse-dot:nth-child(2) { animation-delay: 0.2s; }
+  .pulse-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes pulseDot {
+    0%,80%,100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+  }
 
   .footer-hint {
     margin-top: 24px;
@@ -219,18 +228,16 @@
   </g>
 </svg>
 
-<form class="card" id="loginForm" autocomplete="off">
+<form class="card" id="loginForm" autocomplete="off" onsubmit="return false">
   <div class="lock-icon">🔒</div>
   <h1>送驗單快速輸入器</h1>
   <div class="subtitle">— 請輸入密碼 —</div>
 
   <div class="input-wrap">
-    <input type="password" id="pwd" placeholder="密碼" autofocus required autocomplete="current-password">
+    <input type="password" id="pwd" placeholder="輸入密碼即自動驗證..." autofocus required autocomplete="current-password">
   </div>
 
-  <button type="submit" id="loginBtn">登 入</button>
-
-  <div class="err" id="err"></div>
+  <div class="status" id="status">&nbsp;</div>
 
   <div class="footer-hint">
     🛡️ 本系統含個人敏感資料，請勿洩漏密碼。<br>
@@ -239,29 +246,29 @@
 </form>
 
 <script>
-const form = document.getElementById('loginForm');
 const pwd = document.getElementById('pwd');
-const btn = document.getElementById('loginBtn');
-const err = document.getElementById('err');
+const status = document.getElementById('status');
 
-function showError(msg) {
-  err.textContent = '✗ ' + msg;
-  err.classList.add('show');
+let tryTimer;
+let lastTried = '';
+let isLocked = false;
+
+function setStatus(text, cls) {
+  status.className = 'status' + (cls ? ' ' + cls : '');
+  status.innerHTML = text;
+}
+function shake() {
   pwd.classList.remove('shake');
   void pwd.offsetWidth;
   pwd.classList.add('shake');
   setTimeout(() => pwd.classList.remove('shake'), 600);
 }
 
-form.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const password = pwd.value.trim();
-  if (!password) { showError('請輸入密碼'); return; }
-
-  btn.disabled = true;
-  btn.textContent = '驗證中...';
-  err.classList.remove('show');
-
+async function tryLogin(password) {
+  if (isLocked) return;
+  if (password === lastTried) return;
+  lastTried = password;
+  setStatus('<span class="pulse-dot"></span><span class="pulse-dot"></span><span class="pulse-dot"></span> 驗證中...', 'checking');
   try {
     const r = await fetch('/api/login', {
       method: 'POST',
@@ -270,21 +277,44 @@ form.addEventListener('submit', async (ev) => {
     });
     const d = await r.json();
     if (d.ok) {
-      btn.textContent = '✓ 登入成功';
-      btn.style.background = '#4caf50';
-      btn.style.color = '#fff';
-      setTimeout(() => location.href = '/', 400);
+      isLocked = true;
+      setStatus('✓ 登入成功', 'ok');
+      pwd.disabled = true;
+      setTimeout(() => location.href = '/', 350);
     } else {
-      showError(d.err || '登入失敗');
-      btn.disabled = false;
-      btn.textContent = '登 入';
-      pwd.value = '';
-      pwd.focus();
+      // 密碼不對 → 清掉狀態，等使用者繼續輸入
+      setStatus('&nbsp;');
     }
   } catch (e) {
-    showError('連線失敗：' + e.message);
-    btn.disabled = false;
-    btn.textContent = '登 入';
+    setStatus('✗ 連線失敗', 'bad');
+  }
+}
+
+// 邊輸入邊驗：debounce 200ms，避免每個按鍵都打 API
+pwd.addEventListener('input', () => {
+  if (isLocked) return;
+  clearTimeout(tryTimer);
+  const v = pwd.value.trim();
+  if (v.length < 3) { setStatus('&nbsp;'); return; }
+  tryTimer = setTimeout(() => tryLogin(v), 220);
+});
+
+// 按 Enter 立即驗 + 錯了搖晃提示
+pwd.addEventListener('keydown', async (ev) => {
+  if (ev.key === 'Enter') {
+    ev.preventDefault();
+    if (isLocked) return;
+    const v = pwd.value.trim();
+    if (!v) return;
+    clearTimeout(tryTimer);
+    // 強制再試一次（即使是同樣密碼）
+    lastTried = '';
+    await tryLogin(v);
+    if (!isLocked) {
+      setStatus('✗ 密碼錯誤', 'bad');
+      shake();
+      pwd.select();
+    }
   }
 });
 </script>
