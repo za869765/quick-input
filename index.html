@@ -216,17 +216,19 @@
 
 <!-- 產出 -->
 <div class="panel">
-  <h2>產出</h2>
+  <h2 style="cursor:default">產出</h2>
   <div class="actions">
     <button class="btn btn-primary" id="btnExport">⬇ 下載送驗單 XLSX</button>
+    <button class="btn btn-secondary" id="btnSyncCloud" title="把目前清單存到雲端">☁ 同步到雲端</button>
   </div>
   <div class="hint" style="margin-top:8px">
-    產出 XLSX 包含：1. <strong>送驗單</strong>（列印紙本）2. <strong>醫事檢驗檢體列表</strong>（⚡ 系統上傳用）
+    產出 XLSX 包含：1. <strong>送驗單</strong>（列印紙本）2. <strong>醫事檢驗檢體列表</strong>（⚡ 系統上傳用）<br>
+    雲端同步後流水號會自動接續，跨裝置可用。
   </div>
 </div>
 
 </div>
-<div class="ver">v0.1.13</div>
+<div class="ver">v0.2.0</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -916,13 +918,43 @@ $('btnClear').addEventListener('click', () => {
   }
 });
 $('btnExport').addEventListener('click', exportXlsx);
+$('btnSyncCloud').addEventListener('click', async () => {
+  const hdr = getHeader();
+  let rows = collectRows().filter(r => r.name || r.id || r.consult);
+  if (rows.length === 0) { alert('沒有可同步的資料'); return; }
+  const payload = rows.map(r => ({
+    no: r.no, mode: currentMode,
+    name: r.name || null, consult: r.consult || null,
+    birth: r.birth || null, id: r.id || null, sex: r.sex || null,
+    target: r.target || hdr.target || null,
+    sampleDate: r.sampleDate || null,
+    reason: hdr.reason || null,
+    unit: hdr.unit || null,
+    sendDate: hdr.sendDate || null
+  }));
+  try {
+    const resp = await fetch('/api/cases', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const d = await resp.json();
+    if (d.ok) {
+      toast('已同步 ' + d.inserted + ' 筆到雲端');
+      fetchMaxFromCloud(); // 同步後更新下一筆
+    } else {
+      alert('同步失敗：' + (d.err || 'unknown'));
+    }
+  } catch (e) {
+    alert('連線失敗：' + e.message + '\n（D1 是否已綁定？）');
+  }
+});
 
-// 起始：年度區碼預設「當前民國年 + 0505」（衛生所固定 05），跨年自動重置流水號
+// 起始：年度區碼預設「當前民國年 + 0505」
 function defaultPrefix() {
   return String(new Date().getFullYear() - 1911) + '0505';
 }
 function checkYearReset() {
-  // 從 localStorage 讀上次使用的年度，若不同則重置流水號
   const lastYear = localStorage.getItem('quickInputLastYear');
   const curYear = String(new Date().getFullYear() - 1911);
   if (lastYear && lastYear !== curYear) {
@@ -931,11 +963,31 @@ function checkYearReset() {
   }
   localStorage.setItem('quickInputLastYear', curYear);
 }
+
+// 從雲端取得最大流水號 → 自動設下一筆（僅當雲端值大於本地值時生效）
+async function fetchMaxFromCloud() {
+  const prefix = $('hdr_no_prefix').value.trim();
+  if (!prefix) return;
+  try {
+    const r = await fetch('/api/cases/max-no?prefix=' + encodeURIComponent(prefix));
+    if (!r.ok) return;
+    const d = await r.json();
+    if (!d.ok || typeof d.nextSerial !== 'number') return;
+    const localNext = nextSerial();
+    if (d.nextSerial > localNext) {
+      setNextSerial(d.nextSerial);
+      toast('已從雲端載入下一筆編號 ' + d.nextNo);
+    }
+  } catch(_) {
+    // 雲端未就緒（D1 未綁定）→ 靜默忽略
+  }
+}
 $('hdr_no_prefix').value = defaultPrefix();
 $('hdr_send_date').value = todayMinguo();
 checkYearReset();
 renderHead();
 updateTargetOptions();
+fetchMaxFromCloud(); // 從雲端取最大編號
 
 // v0.1.8：嘗試自動載入暫存；沒有就開 10 列空白
 const loaded = tryAutoLoad();

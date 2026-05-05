@@ -6,3 +6,5 @@ node_modules/
 .DS_Store
 Thumbs.db
 .vscode/
+# 敏感資料：本機解析的個案 JSON 不入版
+_import_*.json

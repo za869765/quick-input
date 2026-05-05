@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>批次匯入 — quick-input</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", "Microsoft JhengHei", sans-serif; padding: 24px; max-width: 900px; margin: 0 auto; background: #f5f7fa; }
+  h1 { color: #1a73e8; }
+  .panel { background: #fff; border-radius: 8px; padding: 16px 20px; margin: 12px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  button { background: #1a73e8; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  button:disabled { background: #ccc; cursor: not-allowed; }
+  pre { background: #f1f3f5; padding: 10px; border-radius: 4px; font-size: 12px; max-height: 300px; overflow: auto; }
+  .ok { color: #2e7d32; }
+  .err { color: #c62828; }
+</style>
+</head>
+<body>
+<h1>批次匯入</h1>
+<p class="hint">選 JSON 檔案（如 _import_115.json），自動 POST 到 /api/cases</p>
+
+<div class="panel">
+  <h3>1. 連線檢查</h3>
+  <button id="btnHealth">檢查 D1 連線</button>
+  <pre id="health">尚未檢查</pre>
+</div>
+
+<div class="panel">
+  <h3>2. 選 JSON 檔</h3>
+  <input type="file" id="fileInput" accept=".json">
+  <pre id="preview">尚未選檔</pre>
+</div>
+
+<div class="panel">
+  <h3>3. 上傳</h3>
+  <button id="btnUpload" disabled>上傳到雲端</button>
+  <pre id="result"></pre>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let pendingRows = null;
+
+$('btnHealth').addEventListener('click', async () => {
+  $('health').textContent = '檢查中...';
+  try {
+    const r = await fetch('/api/_health');
+    const d = await r.json();
+    $('health').textContent = JSON.stringify(d, null, 2);
+    $('health').className = d.ok ? 'ok' : 'err';
+  } catch (e) {
+    $('health').textContent = '失敗：' + e.message;
+    $('health').className = 'err';
+  }
+});
+
+$('fileInput').addEventListener('change', (ev) => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const arr = JSON.parse(e.target.result);
+      if (!Array.isArray(arr)) throw new Error('JSON 必須是陣列');
+      pendingRows = arr;
+      $('preview').textContent = '✓ ' + arr.length + ' 筆\n樣本：\n' + JSON.stringify(arr[0], null, 2);
+      $('preview').className = 'ok';
+      $('btnUpload').disabled = false;
+    } catch (err) {
+      $('preview').textContent = '解析失敗：' + err.message;
+      $('preview').className = 'err';
+    }
+  };
+  reader.readAsText(f);
+});
+
+$('btnUpload').addEventListener('click', async () => {
+  if (!pendingRows) return;
+  $('btnUpload').disabled = true;
+  $('result').textContent = '上傳中... (' + pendingRows.length + ' 筆)';
+  try {
+    // 分批送 (每批 100 筆)
+    let inserted = 0;
+    const errors = [];
+    for (let i = 0; i < pendingRows.length; i += 100) {
+      const batch = pendingRows.slice(i, i + 100).map(r => ({
+        no: r.no,
+        mode: r.mode || 'named',
+        name: r.name,
+        consult: r.consult,
+        birth: r.birth,
+        id: r.id || r.id_no,
+        sex: r.sex,
+        target: r.target,
+        sampleDate: r.date || r.sampleDate || r.sample_date,
+        reason: r.reason,
+        unit: r.unit,
+        sendDate: r.send_date || r.sendDate,
+        source_file: r.source_file,
+        apply_no: r.apply_no
+      }));
+      const r = await fetch('/api/cases', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(batch)
+      });
+      const d = await r.json();
+      if (d.ok) inserted += d.inserted;
+      else errors.push('batch ' + (i / 100 + 1) + ': ' + d.err);
+      $('result').textContent = '進度：' + inserted + ' / ' + pendingRows.length + (errors.length ? '\n錯誤：' + errors.join('\n') : '');
+    }
+    $('result').textContent = '✓ 完成！共 ' + inserted + ' 筆\n' + (errors.length ? '錯誤：\n' + errors.join('\n') : '');
+    $('result').className = errors.length ? 'err' : 'ok';
+  } catch (e) {
+    $('result').textContent = '失敗：' + e.message;
+    $('result').className = 'err';
+  }
+});
+</script>
+</body>
+</html>
