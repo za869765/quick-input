@@ -215,7 +215,7 @@
 </div>
 
 </div>
-<div class="ver">v0.1.4</div>
+<div class="ver">v0.1.5</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -240,38 +240,49 @@ function smartDate(input) {
   if (!input) return '';
   let v = String(input).trim();
   if (!v) return '';
-  // 簡寫
   if (/^(t|today|今天)$/i.test(v)) return todayMinguo();
   if (/^(y|yesterday|昨天|昨)$/i.test(v)) {
     const d = new Date(); d.setDate(d.getDate() - 1); return mguDate(d);
   }
-  // 純數字
   const digits = v.replace(/\D/g, '');
+
+  // 純年份（2~4 位）— 民國/西元自動辨識
+  if (digits.length >= 2 && digits.length <= 4 && digits === v) {
+    if (digits.length === 4) {
+      const num = parseInt(digits, 10);
+      // 1900~2099 視為西元年 → 換算民國年
+      if (num >= 1900 && num <= 2099) return String(num - 1911);
+      // 其他 4 位數 → 視為 MMDD（今年 + MM/DD）
+      const y = new Date().getFullYear() - 1911;
+      return y + '/' + digits.slice(0, 2) + '/' + digits.slice(2);
+    }
+    if (digits.length === 3) {
+      // YYY (民國 3 位) → 保留
+      return digits;
+    }
+    if (digits.length === 2) {
+      // YY (民國 2 位) → 保留
+      return digits;
+    }
+  }
+
   if (digits.length === 4) {
-    // MMDD → 今年/MM/DD
     const y = new Date().getFullYear() - 1911;
     return y + '/' + digits.slice(0, 2) + '/' + digits.slice(2);
   }
-  if (digits.length === 5) {
-    // YMMDD（多半是 YYY 民國前 1 碼為 0 → 不會這樣，跳過）
-    return v;
-  }
+  if (digits.length === 5) return v;
   if (digits.length === 6) {
-    // YYMMDD → YY/MM/DD（民國 2 位）
     return digits.slice(0,2) + '/' + digits.slice(2,4) + '/' + digits.slice(4);
   }
   if (digits.length === 7) {
-    // YYYMMDD → YYY/MM/DD
     return digits.slice(0,3) + '/' + digits.slice(3,5) + '/' + digits.slice(5);
   }
   if (digits.length === 8) {
-    // YYYY (西元) MMDD → 民國/MM/DD
     const yy = parseInt(digits.slice(0,4), 10);
     if (yy >= 1900 && yy <= 2099) {
       return (yy - 1911) + '/' + digits.slice(4,6) + '/' + digits.slice(6);
     }
   }
-  // 含分隔符
   const parts = v.split(/[\.\-\/]/).map(x => x.trim()).filter(x => x);
   if (parts.length === 3) {
     let y = parts[0];
