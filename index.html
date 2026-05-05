@@ -199,8 +199,8 @@
 
   <div class="actions">
     <button class="btn btn-secondary" id="btnAdd5">+ 加 5 列</button>
-    <button class="btn btn-secondary" id="btnLoadDraft">載入暫存</button>
     <button class="btn btn-danger" id="btnClear">清空</button>
+    <span class="hint" style="margin:0;align-self:center">資料自動暫存（每次輸入即存、進入自動載入）</span>
   </div>
   <div style="overflow-x:auto;">
     <table id="dataTable">
@@ -216,7 +216,6 @@
   <h2>產出</h2>
   <div class="actions">
     <button class="btn btn-primary" id="btnExport">⬇ 下載送驗單 XLSX</button>
-    <button class="btn btn-secondary" id="btnSaveDraft">💾 儲存暫存（本機）</button>
   </div>
   <div class="hint" style="margin-top:8px">
     產出 XLSX 包含：1. <strong>送驗單</strong>（列印紙本）2. <strong>醫事檢驗檢體列表</strong>（⚡ 系統上傳用）
@@ -224,7 +223,7 @@
 </div>
 
 </div>
-<div class="ver">v0.1.7</div>
+<div class="ver">v0.1.8</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -371,11 +370,9 @@ const COLUMNS = {
     { key: 'sampleDate', label: '採檢日期', width: 110, default: 'today', date: true, optional: true }
   ],
   anon: [
-    { key: 'no', label: '送驗編號', width: 140, mono: true, auto: true },
-    { key: 'consult', label: '諮詢代碼', width: 110, mono: true, required: true },
-    { key: 'birth', label: '出生年月日', width: 130, ph: '600616', optional: true, date: true },
-    { key: 'sex', label: '性別', width: 90, type: 'sex' },
-    { key: 'sampleDate', label: '採檢日期', width: 110, default: 'today', date: true, optional: true }
+    { key: 'no', label: '送驗編號', width: 160, mono: true, auto: true },
+    { key: 'consult', label: '諮詢代碼', width: 200, mono: true, required: true },
+    { key: 'sampleDate', label: '採檢日期', width: 130, default: 'today', date: true, optional: true }
   ]
 };
 let currentMode = 'named';
@@ -658,20 +655,24 @@ function pasteAsRows(text, startEl) {
 }
 
 // ================================================================
-// 模式切換
-// ================================================================
+// 模式切換（具/匿共用流水號，切換不重置）
 document.querySelectorAll('#modeSwitch label').forEach(label => {
   label.addEventListener('click', function() {
     if (this.classList.contains('active')) return;
     const newMode = this.dataset.mode;
-    if (tbody.children.length > 1 || (tbody.children.length === 1 && hasAnyData())) {
-      if (!confirm('切換模式會保留共同欄位，特有欄位資料會清掉。確定切換到「' + (newMode === 'named' ? '具名' : '匿名') + '送驗」？')) return;
+    if (tbody.children.length > 1 && hasAnyData()) {
+      if (!confirm('切換模式會清空目前清單。流水號會保留，繼續編號。確定切換到「' + (newMode === 'named' ? '具名' : '匿名') + '送驗」？')) return;
     }
     document.querySelectorAll('#modeSwitch label').forEach(x => x.classList.remove('active'));
     this.classList.add('active');
     this.querySelector('input').checked = true;
     currentMode = newMode;
-    rebuildTable();
+    // 切換時清空表格但保留流水號
+    tbody.innerHTML = '';
+    rowSeq = 0;
+    renderHead();
+    for (let i = 0; i < 10; i++) addRow();
+    autoSave();
   });
 });
 function hasAnyData() {
@@ -754,21 +755,24 @@ function exportXlsx() {
 // ================================================================
 // 暫存
 // ================================================================
-function saveDraft() {
-  const draft = {
-    mode: currentMode, header: getHeader(),
-    noPrefix: $('hdr_no_prefix').value, noNext: $('hdr_no_next').value,
-    rows: collectRows(), savedAt: new Date().toISOString()
-  };
-  try {
-    localStorage.setItem('quickInputDraft', JSON.stringify(draft));
-    toast('已儲存暫存');
-  } catch (e) { alert('儲存失敗：' + e.message); }
+// 自動暫存（debounced 200ms）
+let saveTimer;
+function autoSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const draft = {
+      mode: currentMode, header: getHeader(),
+      noPrefix: $('hdr_no_prefix').value, noNext: $('hdr_no_next').value,
+      rows: collectRows(), savedAt: new Date().toISOString()
+    };
+    try { localStorage.setItem('quickInputDraft', JSON.stringify(draft)); } catch(_){}
+  }, 200);
 }
-function loadDraft() {
+
+function tryAutoLoad() {
   try {
     const raw = localStorage.getItem('quickInputDraft');
-    if (!raw) { alert('沒有暫存資料'); return; }
+    if (!raw) return false;
     const d = JSON.parse(raw);
     if (d.mode && d.mode !== currentMode) {
       currentMode = d.mode;
@@ -790,10 +794,13 @@ function loadDraft() {
     rowSeq = 0;
     renderHead();
     (d.rows || []).forEach(r => addRow(r));
-    updateNoPreview();
-    toast('已載入暫存（' + (d.savedAt || '?') + '）');
-  } catch (e) { alert('載入失敗：' + e.message); }
+    return (d.rows || []).length > 0;
+  } catch (e) { return false; }
 }
+
+// 全部欄位變動都觸發 autoSave
+document.addEventListener('input', autoSave);
+document.addEventListener('change', autoSave);
 
 // ================================================================
 // Toast 提示
@@ -817,15 +824,16 @@ function toast(msg) {
 // ================================================================
 $('btnAdd5').addEventListener('click', () => {
   for (let i = 0; i < 5; i++) addRow();
+  autoSave();
 });
 $('btnClear').addEventListener('click', () => {
-  if (confirm('確定清空所有資料？')) {
-    tbody.innerHTML = ''; rowSeq = 0; updateEmpty();
+  if (confirm('確定清空所有資料？流水號會保留繼續編號。')) {
+    tbody.innerHTML = ''; rowSeq = 0;
+    for (let i = 0; i < 10; i++) addRow();
+    autoSave();
   }
 });
 $('btnExport').addEventListener('click', exportXlsx);
-$('btnSaveDraft').addEventListener('click', saveDraft);
-$('btnLoadDraft').addEventListener('click', loadDraft);
 
 // 起始：年度區碼預設「當前民國年 + 0505」（衛生所固定 05），跨年自動重置流水號
 function defaultPrefix() {
@@ -844,14 +852,17 @@ function checkYearReset() {
 $('hdr_no_prefix').value = defaultPrefix();
 $('hdr_send_date').value = todayMinguo();
 checkYearReset();
-updateNoPreview();
 renderHead();
-// v0.1.6：預設帶 10 列空白可直接連續打
-for (let i = 0; i < 10; i++) addRow();
-// 進場 focus 第一列姓名格
+
+// v0.1.8：嘗試自動載入暫存；沒有就開 10 列空白
+const loaded = tryAutoLoad();
+if (!loaded) {
+  for (let i = 0; i < 10; i++) addRow();
+}
+updateNoPreview();
 setTimeout(() => {
   const firstTr = tbody.children[0];
-  if (firstTr) moveToCell(firstTr, 2); // idx 2 = 姓名
+  if (firstTr) moveToCell(firstTr, 2); // 姓名/諮詢代碼欄
 }, 100);
 </script>
 
