@@ -227,7 +227,7 @@
 </div>
 
 </div>
-<div class="ver">v0.1.10</div>
+<div class="ver">v0.1.11</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -371,6 +371,7 @@ const COLUMNS = {
     { key: 'birth', label: '出生年月日', width: 130, ph: '600616 或 60/06/16', required: true, date: true },
     { key: 'id', label: '身分證字號', width: 140, mono: true, ph: '可空', optional: true, idCheck: true, upper: true },
     { key: 'sex', label: '性別', width: 90, type: 'sex' },
+    { key: 'target', label: '檢驗對象', width: 90, type: 'target' },
     { key: 'sampleDate', label: '採檢日期', width: 110, default: 'today', date: true, optional: true }
   ],
   anon: [
@@ -382,27 +383,57 @@ const COLUMNS = {
 let currentMode = 'named';
 function getCols() { return COLUMNS[currentMode]; }
 
-// 檢驗對象代碼依模式切換
+// 檢驗對象代碼選項
+const TARGET_OPTS_NAMED = [
+  ['1','1 警方查獲-黃單'],
+  ['2','2 警方查獲-毒危講習'],
+  ['3','3 藥癮者篩檢-地檢署'],
+  ['4','4 八大行業、性工作者'],
+  ['5','5 衛生局自行追蹤-梅毒舊案'],
+  ['6','6 局端-受血者'],
+  ['7','7 全民-35歲以下'],
+  ['8','8 全民-36~55歲'],
+  ['9','9 全民-HIV接觸者'],
+  ['10','10 全民-TB通報共管']
+];
+const TARGET_OPTS_ANON = [
+  ['11','11 匿名篩檢-外展'],
+  ['12','12 匿名篩檢-非外展(社區)']
+];
+
+function buildTargetOptionsHtml(opts, selected) {
+  return opts.map(([v, l]) => '<option value="' + v + '"' + (v === selected ? ' selected' : '') + '>' + l + '</option>').join('');
+}
+
+// 依出生民國/西元年自動推算 target（具名）
+function targetFromBirth(birthStr) {
+  if (!birthStr) return '7'; // 無法識別 → 7
+  // 取年份（民國 2~3 位 或西元 4 位）
+  const m = String(birthStr).match(/^(\d{2,4})/);
+  if (!m) return '7';
+  let y = parseInt(m[1], 10);
+  // 4 位 → 西元
+  if (y >= 1900) y = y - 1911;
+  // 2~3 位 → 民國
+  const curY = (new Date().getFullYear()) - 1911;
+  const age = curY - y;
+  if (isNaN(age) || age < 0) return '7';
+  if (age <= 35) return '7';
+  return '8'; // 36+ 一律 8
+}
+
+// 切換模式時更新「抬頭」的檢驗對象代碼下拉
 function updateTargetOptions() {
   const sel = $('hdr_target');
   const cur = sel.value;
-  let html = '';
   if (currentMode === 'anon') {
-    html =
-      '<option value="11">11 匿名篩檢-外展</option>' +
-      '<option value="12">12 匿名篩檢-非外展(社區)</option>';
-    sel.innerHTML = html;
+    sel.innerHTML = buildTargetOptionsHtml(TARGET_OPTS_ANON, '');
     sel.value = (cur === '11' || cur === '12') ? cur : '11';
+    sel.disabled = false;
   } else {
-    html =
-      '<option value="">— 請選擇 —</option>' +
-      '<option value="1">1 警方查獲-黃單</option>' +
-      '<option value="4">4 八大行業、性工作者</option>' +
-      '<option value="5">5 衛生局自行追蹤-梅毒舊案</option>' +
-      '<option value="7">7 全民-35歲以下(具名)</option>' +
-      '<option value="8">8 全民-36~55歲(具名)</option>';
-    sel.innerHTML = html;
-    sel.value = (cur === '11' || cur === '12') ? '' : cur;
+    // 具名模式：抬頭下拉作為「整批預設」，但每筆會自動依出生帶
+    sel.innerHTML = '<option value="">— 不指定（依出生自動）—</option>' + buildTargetOptionsHtml(TARGET_OPTS_NAMED, cur);
+    if (cur === '11' || cur === '12') sel.value = '';
   }
 }
 
@@ -456,6 +487,11 @@ function addRow(data) {
         '<option value="1"' + (v === '1' ? ' selected' : '') + '>1男</option>' +
         '<option value="2"' + (v === '2' ? ' selected' : '') + '>2女</option>' +
         '</select></td>';
+    } else if (c.type === 'target') {
+      // 預設依出生年自動推算
+      const auto = data.target || (data.birth ? targetFromBirth(data.birth) : '');
+      const opts = (currentMode === 'anon' ? TARGET_OPTS_ANON : TARGET_OPTS_NAMED);
+      html += '<td><select class="r-' + c.key + '">' + buildTargetOptionsHtml(opts, auto || '7') + '</select></td>';
     } else {
       const cls = 'r-' + c.key + (c.mono ? ' mono' : '');
       const ph = c.ph ? ' placeholder="' + c.ph + '"' : '';
@@ -568,8 +604,19 @@ function smartDateField(input) {
   if (after !== before) {
     input.value = after;
     input.classList.remove('flash-converted');
-    void input.offsetWidth; // restart animation
+    void input.offsetWidth;
     input.classList.add('flash-converted');
+  }
+  // 出生欄 → 連動更新本列檢驗對象（具名模式）
+  if (input.classList.contains('r-birth') && currentMode === 'named') {
+    const tr = input.closest('tr');
+    if (tr) {
+      const targetEl = tr.querySelector('.r-target');
+      if (targetEl) {
+        const auto = targetFromBirth(input.value);
+        if (auto) targetEl.value = auto;
+      }
+    }
   }
 }
 
@@ -753,7 +800,8 @@ function exportXlsx() {
       ['', '', '', '', '', '1.男\n2.女', '', '已', '未', '', '梅毒血清抗體檢驗\n快速血漿反應素(RPR)', '化學冷光法\n(Combo Ab+Ag)', '免疫層析法', '']
     );
     rows.forEach(r => {
-      sheet1Data.push([r.seq, r.no, r.name, r.birth, r.id || '', r.sex, '', '', '', r.sampleDate, '', '', '', hdr.target]);
+      const tgt = r.target || hdr.target || '';
+      sheet1Data.push([r.seq, r.no, r.name, r.birth, r.id || '', r.sex, '', '', '', r.sampleDate, '', '', '', tgt]);
     });
   } else {
     sheet1Data.push(
@@ -762,7 +810,7 @@ function exportXlsx() {
       ['', '', '', '', '1.男\n2.女', '', '梅毒血清抗體檢驗\n快速血漿反應素(RPR)', '化學冷光法\n(Combo Ab+Ag)', '免疫層析法', '']
     );
     rows.forEach(r => {
-      sheet1Data.push([r.seq, r.no, r.consult, r.birth, r.sex, r.sampleDate, '', '', '', hdr.target]);
+      sheet1Data.push([r.seq, r.no, r.consult, '', '', r.sampleDate, '', '', '', hdr.target]);
     });
   }
   const sheet1 = XLSX.utils.aoa_to_sheet(sheet1Data);
