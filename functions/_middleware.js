@@ -13,7 +13,9 @@ async function deriveToken(secret) {
 
 function isAllowedPath(path) {
   // 登入頁與登入 API 不需要驗證
-  return path === '/login.html' ||
+  // 注意 CF Pages 會把 /login.html 自動 308 → /login，兩者都要放行
+  return path === '/login' ||
+         path === '/login.html' ||
          path === '/api/login' ||
          path === '/api/logout' ||
          path === '/favicon.ico';
@@ -43,7 +45,8 @@ export async function onRequest(context) {
       headers: { 'content-type': 'application/json' }
     });
   }
-  return Response.redirect(url.origin + '/login.html', 302);
+  // 注意：用 /login (CF Pages 會自動對應 login.html 檔案)
+  return Response.redirect(url.origin + '/login', 302);
 }
 
 // Export for login API to use
