@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>送驗單快速輸入器</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: #f5f7fa;
+    color: #2c3e50;
+    padding: 20px;
+  }
+  .wrap { max-width: 1400px; margin: 0 auto; }
+  h1 { color: #1a73e8; margin: 0 0 6px; font-size: 22px; }
+  .hint { color: #6c757d; font-size: 13px; margin-bottom: 14px; }
+
+  .panel {
+    background: #fff;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .panel h2 {
+    font-size: 15px;
+    margin: 0 0 10px;
+    color: #1a73e8;
+    border-bottom: 1px solid #e8f0fe;
+    padding-bottom: 6px;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .form-row label {
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+    color: #495057;
+  }
+  .form-row label > span {
+    margin-bottom: 3px;
+    font-weight: 600;
+  }
+  input, select {
+    padding: 8px 10px;
+    border: 1.5px solid #d0d7de;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+  input:focus, select:focus {
+    border-color: #1a73e8;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(26,115,232,0.15);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th, td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #eef2f7;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: #f8f9fa;
+    font-weight: 600;
+    font-size: 12px;
+    color: #495057;
+  }
+  td input, td select {
+    width: 100%;
+    padding: 5px 8px;
+    font-size: 13px;
+    border: 1px solid #d0d7de;
+  }
+
+  .actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 14px 0;
+  }
+  button {
+    padding: 9px 16px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.15s;
+  }
+  .btn-primary { background: #1a73e8; color: #fff; }
+  .btn-primary:hover { background: #0d47a1; }
+  .btn-secondary { background: #e9ecef; color: #495057; }
+  .btn-secondary:hover { background: #d0d7de; }
+  .btn-danger { background: #fff; color: #c62828; border: 1px solid #ffcdd2; }
+  .btn-danger:hover { background: #ffebee; }
+
+  .placeholder {
+    text-align: center;
+    color: #9aa3ad;
+    padding: 28px;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<h1>送驗單快速輸入器</h1>
+<div class="hint">輸入個資後產出送驗單 XLSX（含 列印分頁 + 系統上傳分頁）。<br>
+版本：v0.1.0 草稿（功能尚在搭建）</div>
+
+<!-- 表單：送驗單抬頭 -->
+<div class="panel">
+  <h2>送驗單抬頭</h2>
+  <div class="form-row">
+    <label><span>單位名稱</span><input id="hdr_unit" value="佳里區衛生所"></label>
+    <label><span>申請單編號</span><input id="hdr_apply_no" placeholder="O114S00xxx"></label>
+    <label><span>送驗日期 (民國)</span><input id="hdr_send_date" placeholder="114/8/29"></label>
+    <label><span>送驗原因</span><input id="hdr_reason" placeholder="愛滋篩檢"></label>
+    <label><span>檢驗對象代碼</span>
+      <select id="hdr_target">
+        <option value="">— 請選擇 —</option>
+        <option value="1">1 警方查獲-黃單</option>
+        <option value="4">4 八大行業、性工作者</option>
+        <option value="5">5 衛生局自行追蹤-梅毒舊案</option>
+        <option value="7">7 全民-35歲以下(具名)</option>
+        <option value="8">8 全民-36~55歲(具名)</option>
+        <option value="11">11 匿名篩檢-外展</option>
+        <option value="12">12 匿名篩檢-非外展(社區)</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<!-- 個案清單 -->
+<div class="panel">
+  <h2>個案清單（可批次新增）</h2>
+  <div class="actions">
+    <button class="btn-primary" id="btnAddRow">+ 新增一列</button>
+    <button class="btn-secondary" id="btnAddBatch">+ 批次貼上</button>
+    <button class="btn-secondary" id="btnLoadDraft">載入暫存</button>
+    <button class="btn-danger" id="btnClear">清空</button>
+  </div>
+  <table id="dataTable">
+    <thead>
+      <tr>
+        <th style="width:36px">#</th>
+        <th>送驗編號</th>
+        <th>姓名</th>
+        <th>出生年月日</th>
+        <th>身分證字號</th>
+        <th style="width:60px">性別</th>
+        <th>連絡電話</th>
+        <th style="width:60px"></th>
+      </tr>
+    </thead>
+    <tbody id="dataTbody"></tbody>
+  </table>
+  <div class="placeholder" id="emptyHint">尚無資料，點「+ 新增一列」開始輸入</div>
+</div>
+
+<!-- 產出 -->
+<div class="panel">
+  <h2>產出</h2>
+  <div class="actions">
+    <button class="btn-primary" id="btnExport">⬇ 下載送驗單 XLSX</button>
+    <button class="btn-secondary" id="btnSaveDraft">💾 儲存暫存（本機）</button>
+  </div>
+  <div class="hint" style="margin-top:8px">
+    產出 XLSX 包含兩個分頁：<br>
+    1. <strong>送驗單</strong>（列印紙本用）<br>
+    2. <strong>醫事檢驗檢體列表</strong>（⚡ 系統上傳用）
+  </div>
+</div>
+
+</div><!-- /.wrap -->
+
+<script>
+// ================================================================
+// 送驗單快速輸入器 v0.1.0
+// ================================================================
+
+const $ = (id) => document.getElementById(id);
+const tbody = $('dataTbody');
+const emptyHint = $('emptyHint');
+
+let rowSeq = 0;
+
+function addRow(data) {
+  data = data || {};
+  rowSeq++;
+  const tr = document.createElement('tr');
+  tr.dataset.idx = rowSeq;
+  tr.innerHTML =
+    '<td>' + rowSeq + '</td>' +
+    '<td><input class="r-no" value="' + (data.no || '') + '" placeholder="11405xxxxx"></td>' +
+    '<td><input class="r-name" value="' + (data.name || '') + '"></td>' +
+    '<td><input class="r-birth" value="' + (data.birth || '') + '" placeholder="60/06/16"></td>' +
+    '<td><input class="r-id" value="' + (data.id || '') + '" placeholder="A123456789" style="font-family:Consolas,monospace"></td>' +
+    '<td><select class="r-sex"><option value="">—</option><option value="1"' + (data.sex==='1'?' selected':'') + '>1男</option><option value="2"' + (data.sex==='2'?' selected':'') + '>2女</option></select></td>' +
+    '<td><input class="r-phone" value="' + (data.phone || '') + '"></td>' +
+    '<td><button class="btn-danger" onclick="this.closest(\'tr\').remove();updateEmpty()">×</button></td>';
+  tbody.appendChild(tr);
+  updateEmpty();
+}
+
+function updateEmpty() {
+  emptyHint.style.display = tbody.children.length === 0 ? 'block' : 'none';
+}
+
+function collectRows() {
+  const rows = [];
+  Array.from(tbody.children).forEach((tr, i) => {
+    rows.push({
+      seq: i + 1,
+      no: tr.querySelector('.r-no').value.trim(),
+      name: tr.querySelector('.r-name').value.trim(),
+      birth: tr.querySelector('.r-birth').value.trim(),
+      id: tr.querySelector('.r-id').value.trim().toUpperCase(),
+      sex: tr.querySelector('.r-sex').value,
+      phone: tr.querySelector('.r-phone').value.trim()
+    });
+  });
+  return rows;
+}
+
+function getHeader() {
+  return {
+    unit: $('hdr_unit').value.trim(),
+    applyNo: $('hdr_apply_no').value.trim(),
+    sendDate: $('hdr_send_date').value.trim(),
+    reason: $('hdr_reason').value.trim(),
+    target: $('hdr_target').value
+  };
+}
+
+// ================================================================
+// XLSX 產出（雙分頁）
+// ================================================================
+function exportXlsx() {
+  const hdr = getHeader();
+  const rows = collectRows();
+  if (rows.length === 0) {
+    alert('請先新增至少一筆個案資料');
+    return;
+  }
+
+  const wb = XLSX.utils.book_new();
+
+  // === Sheet 1: 送驗單（列印紙本）===
+  const sheet1Data = [
+    [hdr.unit ? (new Date().getFullYear() - 1911) + '年度臺南市政府衛生局性病檢驗送驗單' : ''],
+    ['單位名稱：' + hdr.unit, '', '', '', '', '', '', '', '', '申請單編號：' + hdr.applyNo, '', '', '送驗日期:' + hdr.sendDate],
+    ['號次', '送驗編號', '姓名', '出生\n年月日', '身份證字號', '性別', '', '婚姻', '', '採檢   日期', '連絡電話', '檢驗項目(結果)', '', '', '檢驗\n對象'],
+    ['', '', '', '', '', '', '', '', '', '', '', '梅毒', '愛滋', '', ''],
+    ['', '', '', '', '', '1.男\n2.女', '', '已', '未', '', '', '梅毒血清抗體檢驗\n快速血漿反應素(RPR)', '化學冷光法\n(Combo Ab+Ag)', '免疫層析法', ''],
+  ];
+  rows.forEach(r => {
+    sheet1Data.push([r.seq, r.no, r.name, r.birth, r.id, r.sex, '', '', '', hdr.sendDate, r.phone, '', '', '', hdr.target]);
+  });
+  const sheet1 = XLSX.utils.aoa_to_sheet(sheet1Data);
+  XLSX.utils.book_append_sheet(wb, sheet1, '送驗單');
+
+  // === Sheet 2: 醫事檢驗檢體列表（⚡ 系統上傳專用）===
+  const sheet2Data = [
+    ['申請單位：', hdr.unit],
+    ['採樣單位：', hdr.unit],
+    ['送驗原因：', hdr.reason],
+    ['備註：', ''],
+    ['樣品編號', '樣品名稱', '製造日期', '有效日期', '採樣日期', '檢驗成分編號列表'],
+  ];
+  rows.forEach(r => {
+    sheet2Data.push([r.no, r.name, hdr.sendDate, '', hdr.sendDate, 'S1-HIV02']);
+  });
+  const sheet2 = XLSX.utils.aoa_to_sheet(sheet2Data);
+  XLSX.utils.book_append_sheet(wb, sheet2, '醫事檢驗檢體列表');
+
+  // 下載
+  const filename = (hdr.applyNo || ('送驗單_' + new Date().toISOString().slice(0,10))) + '.xlsx';
+  XLSX.writeFile(wb, filename);
+}
+
+// ================================================================
+// 暫存（localStorage）
+// ================================================================
+function saveDraft() {
+  const draft = {
+    header: getHeader(),
+    rows: collectRows(),
+    savedAt: new Date().toISOString()
+  };
+  try {
+    localStorage.setItem('quickInputDraft', JSON.stringify(draft));
+    alert('已儲存暫存（本機 localStorage）');
+  } catch (e) {
+    alert('儲存失敗：' + e.message);
+  }
+}
+
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem('quickInputDraft');
+    if (!raw) { alert('沒有暫存資料'); return; }
+    const d = JSON.parse(raw);
+    if (d.header) {
+      $('hdr_unit').value = d.header.unit || '';
+      $('hdr_apply_no').value = d.header.applyNo || '';
+      $('hdr_send_date').value = d.header.sendDate || '';
+      $('hdr_reason').value = d.header.reason || '';
+      $('hdr_target').value = d.header.target || '';
+    }
+    tbody.innerHTML = '';
+    rowSeq = 0;
+    (d.rows || []).forEach(r => addRow(r));
+    alert('已載入暫存（' + (d.savedAt || '?') + '）');
+  } catch (e) {
+    alert('載入失敗：' + e.message);
+  }
+}
+
+// ================================================================
+// 事件
+// ================================================================
+$('btnAddRow').addEventListener('click', () => addRow());
+$('btnAddBatch').addEventListener('click', () => {
+  const txt = prompt('每行一筆，欄位用 Tab 分隔：送驗編號\\t姓名\\t出生\\t身分證\\t性別\\t電話');
+  if (!txt) return;
+  txt.split(/\r?\n/).forEach(line => {
+    const c = line.split(/\t|,/);
+    if (c.length < 2) return;
+    addRow({ no: c[0], name: c[1], birth: c[2], id: c[3], sex: c[4], phone: c[5] });
+  });
+});
+$('btnClear').addEventListener('click', () => {
+  if (confirm('確定清空所有資料？')) {
+    tbody.innerHTML = '';
+    rowSeq = 0;
+    updateEmpty();
+  }
+});
+$('btnExport').addEventListener('click', exportXlsx);
+$('btnSaveDraft').addEventListener('click', saveDraft);
+$('btnLoadDraft').addEventListener('click', loadDraft);
+
+// 起始空白列
+addRow();
+</script>
+
+</body>
+</html>
