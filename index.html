@@ -81,6 +81,13 @@
   tbody td input.mono { font-family: Consolas, Menlo, monospace; }
   tbody td input.id-ok { background: #f1f8e9; }
   tbody td input.id-err { background: #ffebee; border-color: #e53935 !important; }
+  tbody td input.flash-converted {
+    animation: flashConvert 0.6s ease-out;
+  }
+  @keyframes flashConvert {
+    0%   { background: #fff59d; }
+    100% { background: transparent; }
+  }
   tbody td.action { width: 36px; text-align: center; background: #f8f9fa; }
   tbody td.action button {
     background: transparent; color: #c62828; border: none;
@@ -217,7 +224,7 @@
 </div>
 
 </div>
-<div class="ver">v0.1.6</div>
+<div class="ver">v0.1.7</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -272,7 +279,14 @@ function smartDate(input) {
     const y = new Date().getFullYear() - 1911;
     return y + '/' + digits.slice(0, 2) + '/' + digits.slice(2);
   }
-  if (digits.length === 5) return v;
+  if (digits.length === 5) {
+    // YYMD（單位數月份）→ YY/0M/DD
+    const m = parseInt(digits.slice(2,3), 10);
+    if (m >= 1 && m <= 9) {
+      return digits.slice(0,2) + '/0' + digits.slice(2,3) + '/' + digits.slice(3,5);
+    }
+    return v;
+  }
   if (digits.length === 6) {
     return digits.slice(0,2) + '/' + digits.slice(2,4) + '/' + digits.slice(4);
   }
@@ -513,11 +527,16 @@ function validateIdField(input) {
   }
 }
 
-// 日期欄 onBlur 智慧轉換
+// 日期欄 onBlur 智慧轉換 + flash 提示
 function smartDateField(input) {
   const before = input.value;
   const after = smartDate(before);
-  if (after !== before) input.value = after;
+  if (after !== before) {
+    input.value = after;
+    input.classList.remove('flash-converted');
+    void input.offsetWidth; // restart animation
+    input.classList.add('flash-converted');
+  }
 }
 
 // ================================================================
