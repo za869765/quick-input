@@ -193,7 +193,7 @@
 <!-- 個案清單 -->
 <div class="panel">
   <h2 style="cursor:default">
-    <span style="display:flex;align-items:center;gap:12px">個案清單 <span class="counter" id="rowCounter">0 筆</span></span>
+    <span style="display:flex;align-items:center;gap:12px">送驗清單 <span class="counter" id="rowCounter">0 筆</span></span>
     <span class="mode-switch" id="modeSwitch">
       <label class="active" data-mode="named"><input type="radio" name="mode" value="named" checked>具名送驗</label>
       <label data-mode="anon"><input type="radio" name="mode" value="anon">匿名送驗</label>
@@ -228,7 +228,7 @@
 </div>
 
 </div>
-<div class="ver">v0.2.2</div>
+<div class="ver">v0.2.3</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -1003,23 +1003,33 @@ function renumberEmptyRows() {
   setNextSerial(serial);
   autoSave();
 }
-$('hdr_no_prefix').value = defaultPrefix();
-$('hdr_send_date').value = todayMinguo();
-checkYearReset();
-renderHead();
-updateTargetOptions();
-fetchMaxFromCloud(); // 從雲端取最大編號
+// v0.2.3：嚴格順序避免 0001 閃現
+async function init() {
+  $('hdr_no_prefix').value = defaultPrefix();
+  $('hdr_send_date').value = todayMinguo();
+  checkYearReset();
+  renderHead();
+  updateTargetOptions();
 
-// v0.1.8：嘗試自動載入暫存；沒有就開 10 列空白
-const loaded = tryAutoLoad();
-if (!loaded) {
-  for (let i = 0; i < 10; i++) addRow();
+  // 1. 先載 localStorage（可能有舊資料）
+  const loaded = tryAutoLoad();
+
+  // 2. 等雲端最大號回來才繼續（會更新 nextSerial 並重編空列）
+  try {
+    await fetchMaxFromCloud();
+  } catch(_) {}
+
+  // 3. 補空列至 10 筆，此時用的是最新 nextSerial
+  while (tbody.children.length < 10) addRow();
+  updateNoPreview();
+
+  // 4. focus 第一格資料欄
+  setTimeout(() => {
+    const firstTr = tbody.children[0];
+    if (firstTr) moveToCell(firstTr, 2);
+  }, 100);
 }
-updateNoPreview();
-setTimeout(() => {
-  const firstTr = tbody.children[0];
-  if (firstTr) moveToCell(firstTr, 2); // 姓名/諮詢代碼欄
-}, 100);
+init();
 </script>
 
 </body>
