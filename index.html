@@ -228,7 +228,7 @@
 </div>
 
 </div>
-<div class="ver">v0.2.0</div>
+<div class="ver">v0.2.1</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -373,12 +373,12 @@ const COLUMNS = {
     { key: 'id', label: '身分證字號', width: 140, mono: true, ph: '可空', optional: true, idCheck: true, upper: true },
     { key: 'sex', label: '性別', width: 90, type: 'sex' },
     { key: 'target', label: '檢驗對象', width: 90, type: 'target' },
-    { key: 'sampleDate', label: '採檢日期', width: 110, default: 'today', date: true, optional: true }
+    { key: 'sampleDate', label: '採檢日期', width: 110, default: 'today', date: true, required: true }
   ],
   anon: [
     { key: 'no', label: '送驗編號', width: 160, mono: true, auto: true },
     { key: 'consult', label: '諮詢代碼', width: 200, mono: true, required: true },
-    { key: 'sampleDate', label: '採檢日期', width: 130, default: 'today', date: true, optional: true }
+    { key: 'sampleDate', label: '採檢日期', width: 130, default: 'today', date: true, required: true }
   ]
 };
 let currentMode = 'named';
