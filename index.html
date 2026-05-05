@@ -228,7 +228,7 @@
 </div>
 
 </div>
-<div class="ver">v0.2.1</div>
+<div class="ver">v0.2.2</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -964,7 +964,7 @@ function checkYearReset() {
   localStorage.setItem('quickInputLastYear', curYear);
 }
 
-// 從雲端取得最大流水號 → 自動設下一筆（僅當雲端值大於本地值時生效）
+// 從雲端取得最大流水號 → 自動設下一筆 + 重編空列
 async function fetchMaxFromCloud() {
   const prefix = $('hdr_no_prefix').value.trim();
   if (!prefix) return;
@@ -976,11 +976,32 @@ async function fetchMaxFromCloud() {
     const localNext = nextSerial();
     if (d.nextSerial > localNext) {
       setNextSerial(d.nextSerial);
+      renumberEmptyRows();
       toast('已從雲端載入下一筆編號 ' + d.nextNo);
     }
-  } catch(_) {
-    // 雲端未就緒（D1 未綁定）→ 靜默忽略
-  }
+  } catch(_) {}
+}
+
+// 把目前所有「空白列」(沒姓名/身分證/諮詢代碼) 用最新流水號重編
+function renumberEmptyRows() {
+  let serial = nextSerial();
+  Array.from(tbody.children).forEach(tr => {
+    const nameEl = tr.querySelector('.r-name');
+    const idEl = tr.querySelector('.r-id');
+    const consultEl = tr.querySelector('.r-consult');
+    const isEmpty = (!nameEl || !nameEl.value.trim()) &&
+                    (!idEl || !idEl.value.trim()) &&
+                    (!consultEl || !consultEl.value.trim());
+    if (isEmpty) {
+      const noEl = tr.querySelector('.r-no');
+      if (noEl) {
+        noEl.value = buildNo(serial);
+        serial++;
+      }
+    }
+  });
+  setNextSerial(serial);
+  autoSave();
 }
 $('hdr_no_prefix').value = defaultPrefix();
 $('hdr_send_date').value = todayMinguo();
