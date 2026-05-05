@@ -176,16 +176,7 @@
     <label><span>送驗日期 (民國)</span><input id="hdr_send_date"></label>
     <label><span>送驗原因（選填，當檔名）</span><input id="hdr_reason" placeholder="例：金唐殿外展、官田軍營"></label>
     <label><span>檢驗對象代碼</span>
-      <select id="hdr_target">
-        <option value="">— 請選擇 —</option>
-        <option value="1">1 警方查獲-黃單</option>
-        <option value="4">4 八大行業、性工作者</option>
-        <option value="5">5 衛生局自行追蹤-梅毒舊案</option>
-        <option value="7">7 全民-35歲以下(具名)</option>
-        <option value="8">8 全民-36~55歲(具名)</option>
-        <option value="11">11 匿名篩檢-外展</option>
-        <option value="12">12 匿名篩檢-非外展(社區)</option>
-      </select>
+      <select id="hdr_target"></select>
     </label>
   </div>
 </div>
@@ -236,7 +227,7 @@
 </div>
 
 </div>
-<div class="ver">v0.1.9</div>
+<div class="ver">v0.1.10</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -390,6 +381,30 @@ const COLUMNS = {
 };
 let currentMode = 'named';
 function getCols() { return COLUMNS[currentMode]; }
+
+// 檢驗對象代碼依模式切換
+function updateTargetOptions() {
+  const sel = $('hdr_target');
+  const cur = sel.value;
+  let html = '';
+  if (currentMode === 'anon') {
+    html =
+      '<option value="11">11 匿名篩檢-外展</option>' +
+      '<option value="12">12 匿名篩檢-非外展(社區)</option>';
+    sel.innerHTML = html;
+    sel.value = (cur === '11' || cur === '12') ? cur : '11';
+  } else {
+    html =
+      '<option value="">— 請選擇 —</option>' +
+      '<option value="1">1 警方查獲-黃單</option>' +
+      '<option value="4">4 八大行業、性工作者</option>' +
+      '<option value="5">5 衛生局自行追蹤-梅毒舊案</option>' +
+      '<option value="7">7 全民-35歲以下(具名)</option>' +
+      '<option value="8">8 全民-36~55歲(具名)</option>';
+    sel.innerHTML = html;
+    sel.value = (cur === '11' || cur === '12') ? '' : cur;
+  }
+}
 
 // ================================================================
 // 自動編號
@@ -693,6 +708,7 @@ document.querySelectorAll('#modeSwitch label').forEach(label => {
     tbody.innerHTML = '';
     rowSeq = 0;
     renderHead();
+    updateTargetOptions();
     for (let i = 0; i < 10; i++) addRow();
     autoSave();
   });
@@ -802,6 +818,7 @@ function tryAutoLoad() {
         x.classList.toggle('active', x.dataset.mode === currentMode);
         if (x.dataset.mode === currentMode) x.querySelector('input').checked = true;
       });
+      updateTargetOptions();
     }
     if (d.header) {
       $('hdr_unit').value = d.header.unit || '';
@@ -875,6 +892,7 @@ $('hdr_no_prefix').value = defaultPrefix();
 $('hdr_send_date').value = todayMinguo();
 checkYearReset();
 renderHead();
+updateTargetOptions();
 
 // v0.1.8：嘗試自動載入暫存；沒有就開 10 列空白
 const loaded = tryAutoLoad();
