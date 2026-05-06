@@ -11,6 +11,10 @@ export async function onRequestGet({ env, request }) {
   const mode = url.searchParams.get('mode') || ''; // named/anon
   const q = url.searchParams.get('q') || ''; // 模糊搜尋姓名/身分證/編號
 
+  // v0.3.0：新增採檢日期區間 filter（民國格式字串可直接比較）
+  const sampleFrom = url.searchParams.get('sample_date_from') || '';
+  const sampleTo = url.searchParams.get('sample_date_to') || '';
+
   let where = [];
   let binds = [];
   if (prefix) { where.push('no LIKE ?'); binds.push(prefix + '%'); }
@@ -20,6 +24,8 @@ export async function onRequestGet({ env, request }) {
     const like = '%' + q + '%';
     binds.push(like, like, like, like);
   }
+  if (sampleFrom) { where.push('sample_date >= ?'); binds.push(sampleFrom); }
+  if (sampleTo) { where.push('sample_date <= ?'); binds.push(sampleTo); }
   const whereSql = where.length ? ' WHERE ' + where.join(' AND ') : '';
   const sql = 'SELECT * FROM cases' + whereSql + ' ORDER BY no DESC LIMIT ?';
   binds.push(limit);

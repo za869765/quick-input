@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>送驗單查詢 — quick-input</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px 20px;
+    font-family: -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: #f5f7fa; color: #2c3e50;
+  }
+  .wrap { max-width: 1700px; margin: 0 auto; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  header h1 { color: #1a73e8; margin: 0; font-size: 22px; }
+  header nav a {
+    color: #1a73e8; text-decoration: none; font-size: 13px; padding: 6px 12px;
+    border: 1px solid #d0d7de; border-radius: 6px; margin-left: 8px; background: #fff;
+  }
+  header nav a:hover { background: #e3f2fd; }
+
+  .panel {
+    background: #fff; border-radius: 10px; padding: 14px 18px; margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .panel h2 {
+    font-size: 14px; margin: 0 0 10px; color: #1a73e8;
+    border-bottom: 1px solid #e8f0fe; padding-bottom: 6px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .counter {
+    background: #e3f2fd; color: #0d47a1; padding: 3px 10px;
+    border-radius: 12px; font-size: 12px; font-weight: 600;
+  }
+
+  .search-grid {
+    display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap: 10px; align-items: end;
+  }
+  .search-grid label { display: flex; flex-direction: column; font-size: 12px; color: #495057; }
+  .search-grid label > span { margin-bottom: 3px; font-weight: 600; }
+  input, select {
+    padding: 7px 10px; border: 1.5px solid #d0d7de; border-radius: 6px;
+    font-size: 14px; font-family: inherit;
+  }
+  input:focus, select:focus {
+    border-color: #1a73e8; outline: none;
+    box-shadow: 0 0 0 3px rgba(26,115,232,0.15);
+  }
+  .date-row { display: flex; gap: 6px; align-items: center; }
+  .date-row input { flex: 1; }
+  .date-presets {
+    display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap;
+  }
+  .date-presets button {
+    padding: 3px 8px; font-size: 11px; border: 1px solid #d0d7de;
+    border-radius: 4px; background: #f8f9fa; color: #495057; cursor: pointer;
+  }
+  .date-presets button:hover { background: #e9ecef; }
+
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  button.btn {
+    padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer;
+    font-size: 14px; font-weight: 600; transition: all 0.15s;
+  }
+  .btn-primary { background: #1a73e8; color: #fff; }
+  .btn-primary:hover { background: #0d47a1; }
+  .btn-secondary { background: #e9ecef; color: #495057; }
+  .btn-secondary:hover { background: #d0d7de; }
+  .btn-success { background: #2e7d32; color: #fff; }
+  .btn-success:hover { background: #1b5e20; }
+  .btn-danger { background: #fff; color: #c62828; border: 1px solid #ffcdd2; }
+  .btn-danger:hover { background: #ffebee; }
+  .btn-small {
+    padding: 3px 8px; font-size: 11.5px; font-weight: 500;
+    border-radius: 4px; cursor: pointer;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    background: #f1f3f5; font-weight: 700; font-size: 12px; color: #495057;
+    border: 1px solid #d0d7de; padding: 7px 8px; text-align: left;
+    position: sticky; top: 0; z-index: 1; white-space: nowrap;
+  }
+  tbody td {
+    padding: 6px 8px; border: 1px solid #e9ecef; background: #fff; vertical-align: middle;
+  }
+  tbody tr:hover td { background: #f0f7ff; }
+  .mono { font-family: Consolas, Menlo, monospace; }
+  .mode-pill {
+    display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600;
+  }
+  .mode-pill.named { background: #e3f2fd; color: #0d47a1; }
+  .mode-pill.anon  { background: #fff3e0; color: #e65100; }
+
+  .placeholder {
+    text-align: center; color: #9aa3ad; padding: 28px; font-size: 14px;
+  }
+
+  /* Modal */
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    display: none; align-items: flex-start; justify-content: center; z-index: 100;
+    padding-top: 50px;
+  }
+  .modal-bg.show { display: flex; }
+  .modal {
+    background: #fff; border-radius: 10px; max-width: 760px; width: 92%;
+    max-height: 86vh; overflow-y: auto; padding: 18px 22px;
+  }
+  .modal h3 {
+    margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid #e8f0fe;
+    color: #1a73e8; font-size: 16px;
+  }
+  .modal-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  }
+  .modal-grid label { display: flex; flex-direction: column; font-size: 12px; color: #495057; }
+  .modal-grid label > span { margin-bottom: 3px; font-weight: 600; }
+  .modal-actions {
+    display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;
+    padding-top: 12px; border-top: 1px solid #e8f0fe;
+  }
+
+  .history-entry {
+    border: 1px solid #d0d7de; border-radius: 6px; padding: 10px 12px;
+    margin-bottom: 8px; background: #f8f9fa;
+  }
+  .history-entry .h-meta {
+    font-size: 12px; color: #6c757d; margin-bottom: 6px;
+  }
+  .history-entry .h-meta .reason {
+    background: #1a73e8; color: #fff; padding: 1px 7px; border-radius: 8px;
+    font-size: 10.5px; font-weight: 600; margin-right: 6px;
+  }
+  .history-entry .h-meta .reason.restore { background: #2e7d32; }
+  .history-entry pre {
+    background: #fff; border: 1px solid #e9ecef; padding: 6px 8px; margin: 0 0 6px;
+    font-size: 11px; max-height: 140px; overflow: auto; white-space: pre-wrap;
+  }
+
+  .ver {
+    position: fixed; right: 12px; bottom: 12px;
+    background: #1a73e8; color: #fff; padding: 4px 10px;
+    border-radius: 12px; font-size: 11.5px; font-family: Consolas, monospace;
+  }
+  .toast {
+    position: fixed; right: 20px; top: 20px; z-index: 200;
+    background: #2e7d32; color: #fff; padding: 10px 18px;
+    border-radius: 8px; font-size: 13px; font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2); opacity: 0.95;
+  }
+  .toast.err { background: #c62828; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <h1>送驗單查詢</h1>
+  <nav>
+    <a href="/">↩ 回入力</a>
+    <a href="/api/logout">登出</a>
+  </nav>
+</header>
+
+<!-- 搜尋條件 -->
+<div class="panel">
+  <h2>搜尋條件</h2>
+  <div class="search-grid">
+    <label><span>關鍵字（編號 / 姓名 / 身分證 / 諮詢代碼）</span>
+      <input id="q" placeholder="支援部分模糊搜">
+    </label>
+    <label><span>模式</span>
+      <select id="modeSel">
+        <option value="">全部</option>
+        <option value="named">具名</option>
+        <option value="anon">匿名</option>
+      </select>
+    </label>
+    <label><span>採檢日期 起 (民國)</span>
+      <input id="dateFrom" placeholder="例：115/05/01" class="mono">
+    </label>
+    <label><span>採檢日期 迄 (民國)</span>
+      <input id="dateTo" placeholder="例：115/05/31" class="mono">
+    </label>
+    <label><span>結果上限</span>
+      <select id="limitSel">
+        <option value="100">100</option>
+        <option value="200">200</option>
+        <option value="500">500</option>
+        <option value="1000" selected>1000</option>
+      </select>
+    </label>
+  </div>
+  <div class="date-presets" style="margin-top:6px">
+    日期快選：
+    <button data-preset="today">今日</button>
+    <button data-preset="7d">近 7 天</button>
+    <button data-preset="30d">近 30 天</button>
+    <button data-preset="thisMonth">本月</button>
+    <button data-preset="clear">清除日期</button>
+  </div>
+  <div class="actions">
+    <button class="btn btn-primary" id="btnSearch">🔍 搜尋</button>
+    <button class="btn btn-secondary" id="btnReset">清除條件</button>
+    <button class="btn btn-success" id="btnExport">📤 匯出 XLSX</button>
+  </div>
+</div>
+
+<!-- 結果 -->
+<div class="panel">
+  <h2>
+    <span style="display:flex;align-items:center;gap:10px">查詢結果 <span class="counter" id="resCounter">— 筆</span></span>
+    <span style="font-size:12px;color:#6c757d;font-weight:400" id="lastQuery"></span>
+  </h2>
+  <div style="overflow-x:auto;">
+    <table id="resultTable">
+      <thead>
+        <tr>
+          <th>送驗編號</th>
+          <th>模式</th>
+          <th>姓名 / 諮詢代碼</th>
+          <th>出生</th>
+          <th>身分證</th>
+          <th>性別</th>
+          <th>檢驗對象</th>
+          <th>採檢日期</th>
+          <th>送驗原因</th>
+          <th>單位</th>
+          <th>送驗日期</th>
+          <th>建立 / 更新</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="resultBody"></tbody>
+    </table>
+  </div>
+  <div class="placeholder" id="emptyHint">輸入條件後點搜尋（不填條件＝列出全部）</div>
+</div>
+
+</div>
+
+<!-- 編輯 Modal -->
+<div class="modal-bg" id="editModal">
+  <div class="modal">
+    <h3 id="editTitle">編輯送驗單</h3>
+    <div class="modal-grid">
+      <label><span>送驗編號（不可改）</span><input id="ed_no" readonly class="mono" style="background:#f0f4ff"></label>
+      <label><span>模式</span>
+        <select id="ed_mode">
+          <option value="named">具名</option>
+          <option value="anon">匿名</option>
+        </select>
+      </label>
+      <label><span>姓名</span><input id="ed_name"></label>
+      <label><span>諮詢代碼</span><input id="ed_consult" class="mono"></label>
+      <label><span>出生（西元 yyyy/mm/dd 或 民國）</span><input id="ed_birth" class="mono"></label>
+      <label><span>身分證</span><input id="ed_id_no" class="mono"></label>
+      <label><span>性別</span>
+        <select id="ed_sex">
+          <option value="">—</option>
+          <option value="1">1 男</option>
+          <option value="2">2 女</option>
+        </select>
+      </label>
+      <label><span>檢驗對象</span><input id="ed_target" class="mono"></label>
+      <label><span>採檢日期 (民國)</span><input id="ed_sample_date" class="mono"></label>
+      <label><span>送驗原因</span><input id="ed_reason"></label>
+      <label><span>單位</span><input id="ed_unit"></label>
+      <label><span>送驗日期 (民國)</span><input id="ed_send_date" class="mono"></label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeEdit()">取消</button>
+      <button class="btn btn-primary" id="btnSaveEdit">💾 儲存（覆蓋更新）</button>
+    </div>
+  </div>
+</div>
+
+<!-- 歷史 Modal -->
+<div class="modal-bg" id="historyModal">
+  <div class="modal">
+    <h3 id="historyTitle">變更歷史</h3>
+    <div id="historyList"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeHistory()">關閉</button>
+    </div>
+  </div>
+</div>
+
+<div class="ver">v0.3.0</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let lastResult = []; // 最近一次查詢結果，給匯出用
+
+// ===== 工具 =====
+function toast(msg, isErr) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (isErr ? ' err' : '');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2400);
+}
+
+function todayMinguo() {
+  const d = new Date();
+  return (d.getFullYear() - 1911) + '/' + String(d.getMonth() + 1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0');
+}
+
+function offsetMinguo(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return (d.getFullYear() - 1911) + '/' + String(d.getMonth() + 1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0');
+}
+
+function thisMonthFirstMinguo() {
+  const d = new Date();
+  return (d.getFullYear() - 1911) + '/' + String(d.getMonth() + 1).padStart(2,'0') + '/01';
+}
+
+// 顯示用：把民國日期標準化（單位數字補零顯示）
+function fmtMinguo(s) {
+  if (!s) return '';
+  return String(s).trim();
+}
+
+// 顯示用：epoch sec → 本地時間
+function fmtTime(sec) {
+  if (!sec) return '';
+  const d = new Date(parseInt(sec, 10) * 1000);
+  return d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0') +
+         ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+
+const TARGET_LABEL = {
+  '1':'1 警方查獲-黃單','2':'2 警方查獲-毒危講習','3':'3 藥癮者篩檢-地檢署',
+  '4':'4 八大行業、性工作者','5':'5 衛生局自行追蹤-梅毒舊案','6':'6 局端-受血者',
+  '7':'7 全民-35歲以下','8':'8 全民-36~55歲','9':'9 全民-HIV接觸者','10':'10 全民-TB通報共管',
+  '11':'11 匿名篩檢-外展','12':'12 匿名篩檢-非外展(社區)'
+};
+
+const SEX_LABEL = { '1':'1男', '2':'2女' };
+
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+
+// ===== 日期快選 =====
+document.querySelectorAll('.date-presets button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const p = btn.dataset.preset;
+    if (p === 'today') {
+      $('dateFrom').value = todayMinguo();
+      $('dateTo').value = todayMinguo();
+    } else if (p === '7d') {
+      $('dateFrom').value = offsetMinguo(-6);
+      $('dateTo').value = todayMinguo();
+    } else if (p === '30d') {
+      $('dateFrom').value = offsetMinguo(-29);
+      $('dateTo').value = todayMinguo();
+    } else if (p === 'thisMonth') {
+      $('dateFrom').value = thisMonthFirstMinguo();
+      $('dateTo').value = todayMinguo();
+    } else if (p === 'clear') {
+      $('dateFrom').value = '';
+      $('dateTo').value = '';
+    }
+  });
+});
+
+// ===== 搜尋 =====
+async function doSearch() {
+  const q = $('q').value.trim();
+  const mode = $('modeSel').value;
+  const dateFrom = $('dateFrom').value.trim();
+  const dateTo = $('dateTo').value.trim();
+  const limit = $('limitSel').value;
+
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (mode) params.set('mode', mode);
+  if (dateFrom) params.set('sample_date_from', dateFrom);
+  if (dateTo) params.set('sample_date_to', dateTo);
+  params.set('limit', limit);
+
+  $('resCounter').textContent = '查詢中…';
+  $('lastQuery').textContent = '';
+
+  try {
+    const r = await fetch('/api/cases?' + params.toString());
+    if (r.status === 401) { location.href = '/login'; return; }
+    const d = await r.json();
+    if (!d.ok) { toast('查詢失敗：' + (d.err || 'unknown'), true); return; }
+    lastResult = d.rows || [];
+    renderResults(d.rows || []);
+    $('resCounter').textContent = (d.count || 0) + ' 筆';
+    const summary = [
+      q && '關鍵字「' + q + '」',
+      mode && '模式 ' + (mode === 'named' ? '具名' : '匿名'),
+      dateFrom && ('採檢 ≥ ' + dateFrom),
+      dateTo && ('採檢 ≤ ' + dateTo),
+      'limit ' + limit
+    ].filter(Boolean).join('・');
+    $('lastQuery').textContent = summary || '（無條件，全部）';
+  } catch (e) {
+    toast('連線失敗：' + e.message, true);
+    $('resCounter').textContent = '— 筆';
+  }
+}
+
+function renderResults(rows) {
+  const tb = $('resultBody');
+  tb.innerHTML = '';
+  if (rows.length === 0) {
+    $('emptyHint').textContent = '查無資料';
+    $('emptyHint').style.display = 'block';
+    return;
+  }
+  $('emptyHint').style.display = 'none';
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    const nameOrConsult = r.mode === 'anon' ? (r.consult || '') : (r.name || '');
+    tr.innerHTML =
+      '<td class="mono">' + esc(r.no) + '</td>' +
+      '<td><span class="mode-pill ' + (r.mode || 'named') + '">' + (r.mode === 'anon' ? '匿名' : '具名') + '</span></td>' +
+      '<td>' + esc(nameOrConsult) + '</td>' +
+      '<td class="mono">' + esc(r.birth || '') + '</td>' +
+      '<td class="mono">' + esc(r.id_no || '') + '</td>' +
+      '<td>' + esc(SEX_LABEL[r.sex] || r.sex || '') + '</td>' +
+      '<td>' + esc(TARGET_LABEL[r.target] || r.target || '') + '</td>' +
+      '<td class="mono">' + esc(fmtMinguo(r.sample_date)) + '</td>' +
+      '<td>' + esc(r.reason || '') + '</td>' +
+      '<td>' + esc(r.unit || '') + '</td>' +
+      '<td class="mono">' + esc(fmtMinguo(r.send_date)) + '</td>' +
+      '<td style="font-size:11px;color:#6c757d">' + fmtTime(r.created_at) + '<br>' + fmtTime(r.updated_at) + '</td>' +
+      '<td style="white-space:nowrap">' +
+        '<button class="btn-small btn-primary btn" onclick="openEdit(\'' + esc(r.no) + '\')">✎ 編輯</button> ' +
+        '<button class="btn-small btn-secondary btn" onclick="openHistory(\'' + esc(r.no) + '\')">📜 歷史</button> ' +
+        '<button class="btn-small btn-danger btn" onclick="doDelete(\'' + esc(r.no) + '\')">🗑</button>' +
+      '</td>';
+    tb.appendChild(tr);
+  });
+}
+
+// ===== 編輯 =====
+function openEdit(no) {
+  const row = lastResult.find(r => r.no === no);
+  if (!row) { toast('找不到該筆資料，請重新搜尋', true); return; }
+  $('editTitle').textContent = '編輯送驗單 ' + no;
+  $('ed_no').value = row.no;
+  $('ed_mode').value = row.mode || 'named';
+  $('ed_name').value = row.name || '';
+  $('ed_consult').value = row.consult || '';
+  $('ed_birth').value = row.birth || '';
+  $('ed_id_no').value = row.id_no || '';
+  $('ed_sex').value = row.sex || '';
+  $('ed_target').value = row.target || '';
+  $('ed_sample_date').value = row.sample_date || '';
+  $('ed_reason').value = row.reason || '';
+  $('ed_unit').value = row.unit || '';
+  $('ed_send_date').value = row.send_date || '';
+  $('editModal').classList.add('show');
+}
+
+function closeEdit() {
+  $('editModal').classList.remove('show');
+}
+
+$('btnSaveEdit').addEventListener('click', async () => {
+  const payload = [{
+    no: $('ed_no').value.trim(),
+    mode: $('ed_mode').value,
+    name: $('ed_name').value.trim() || null,
+    consult: $('ed_consult').value.trim() || null,
+    birth: $('ed_birth').value.trim() || null,
+    id: $('ed_id_no').value.trim() || null,
+    sex: $('ed_sex').value || null,
+    target: $('ed_target').value.trim() || null,
+    sampleDate: $('ed_sample_date').value.trim() || null,
+    reason: $('ed_reason').value.trim() || null,
+    unit: $('ed_unit').value.trim() || null,
+    sendDate: $('ed_send_date').value.trim() || null
+  }];
+  try {
+    const r = await fetch('/api/cases', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (!d.ok) { toast('儲存失敗：' + (d.err || 'unknown'), true); return; }
+    toast('✓ 已覆蓋更新，舊版本已存入歷史');
+    closeEdit();
+    doSearch(); // 重新撈一次
+  } catch (e) {
+    toast('連線失敗：' + e.message, true);
+  }
+});
+
+// ===== 歷史 =====
+async function openHistory(no) {
+  $('historyTitle').textContent = '變更歷史 — ' + no;
+  $('historyList').innerHTML = '<div class="placeholder">載入中…</div>';
+  $('historyModal').classList.add('show');
+  try {
+    const r = await fetch('/api/cases/history?no=' + encodeURIComponent(no));
+    const d = await r.json();
+    if (!d.ok) { $('historyList').innerHTML = '<div class="placeholder">取得失敗：' + esc(d.err || '') + '</div>'; return; }
+    renderHistory(no, d.rows || []);
+  } catch (e) {
+    $('historyList').innerHTML = '<div class="placeholder">連線失敗：' + esc(e.message) + '</div>';
+  }
+}
+
+async function renderHistory(no, rows) {
+  if (rows.length === 0) {
+    $('historyList').innerHTML = '<div class="placeholder">這筆編號從未被覆蓋過</div>';
+    return;
+  }
+  // 同步抓每筆的 snapshot
+  const detailFetches = rows.map(r => fetch('/api/cases/history?id=' + r.id).then(x => x.json()).catch(() => null));
+  const details = await Promise.all(detailFetches);
+  const html = rows.map((r, i) => {
+    const detail = details[i];
+    const snap = detail?.snapshot || {};
+    const reasonClass = (r.reason === 'restore') ? 'restore' : '';
+    return '<div class="history-entry">' +
+      '<div class="h-meta">' +
+        '<span class="reason ' + reasonClass + '">' + esc(r.reason || 'upsert') + '</span>' +
+        '#' + r.id + '・' + fmtTime(r.replaced_at) +
+      '</div>' +
+      '<pre>' + esc(JSON.stringify({
+        name: snap.name, consult: snap.consult, birth: snap.birth,
+        id_no: snap.id_no, sex: snap.sex, target: snap.target,
+        sample_date: snap.sample_date, reason: snap.reason,
+        unit: snap.unit, send_date: snap.send_date
+      }, null, 2)) + '</pre>' +
+      '<button class="btn-small btn-success btn" onclick="doRestore(' + r.id + ', \'' + esc(no) + '\')">↩ 還原為此版本</button>' +
+    '</div>';
+  }).join('');
+  $('historyList').innerHTML = html;
+}
+
+async function doRestore(historyId, no) {
+  if (!confirm('確定要把編號 ' + no + ' 還原成這個版本嗎？\n\n（當前版本會自動存進歷史，可以再還原回去）')) return;
+  try {
+    const r = await fetch('/api/cases/history', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ history_id: historyId })
+    });
+    const d = await r.json();
+    if (!d.ok) { toast('還原失敗：' + (d.err || 'unknown'), true); return; }
+    toast('✓ 已還原 ' + no);
+    closeHistory();
+    doSearch();
+  } catch (e) {
+    toast('連線失敗：' + e.message, true);
+  }
+}
+
+function closeHistory() {
+  $('historyModal').classList.remove('show');
+}
+
+// ===== 刪除 =====
+async function doDelete(no) {
+  if (!confirm('確定要刪除編號 ' + no + ' ？\n\n（建議先看歷史備份，刪除動作不會自動寫進 cases_history）')) return;
+  try {
+    const r = await fetch('/api/cases?no=' + encodeURIComponent(no), { method: 'DELETE' });
+    const d = await r.json();
+    if (!d.ok) { toast('刪除失敗：' + (d.err || 'unknown'), true); return; }
+    toast('✓ 已刪除 ' + no);
+    doSearch();
+  } catch (e) {
+    toast('連線失敗：' + e.message, true);
+  }
+}
+
+// ===== 匯出 =====
+$('btnExport').addEventListener('click', () => {
+  if (lastResult.length === 0) { toast('沒有可匯出的資料，請先搜尋', true); return; }
+  const headers = ['送驗編號', '模式', '姓名', '諮詢代碼', '出生', '身分證', '性別', '檢驗對象', '採檢日期', '送驗原因', '單位', '送驗日期', '建立時間', '更新時間'];
+  const data = [headers].concat(lastResult.map(r => [
+    r.no,
+    r.mode === 'anon' ? '匿名' : '具名',
+    r.name || '',
+    r.consult || '',
+    r.birth || '',
+    r.id_no || '',
+    SEX_LABEL[r.sex] || r.sex || '',
+    TARGET_LABEL[r.target] || r.target || '',
+    r.sample_date || '',
+    r.reason || '',
+    r.unit || '',
+    r.send_date || '',
+    fmtTime(r.created_at),
+    fmtTime(r.updated_at)
+  ]));
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '送驗單查詢');
+  const ts = todayMinguo().replace(/\//g, '');
+  XLSX.writeFile(wb, ts + '_送驗單查詢結果.xlsx');
+  toast('✓ 已下載 ' + lastResult.length + ' 筆');
+});
+
+// ===== 重設 =====
+$('btnReset').addEventListener('click', () => {
+  $('q').value = '';
+  $('modeSel').value = '';
+  $('dateFrom').value = '';
+  $('dateTo').value = '';
+  $('limitSel').value = '1000';
+});
+
+$('btnSearch').addEventListener('click', doSearch);
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+$('dateFrom').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+$('dateTo').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+// ===== 初次載入即查 =====
+doSearch();
+</script>
+</body>
+</html>
