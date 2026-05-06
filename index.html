@@ -231,7 +231,7 @@
 </div>
 
 </div>
-<div class="ver">v0.3.1</div>
+<div class="ver">v0.3.2</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -771,6 +771,13 @@ tbody.addEventListener('keydown', function(e) {
     e.preventDefault();
     if (tr.previousElementSibling) moveToCell(tr.previousElementSibling, cellIdx);
   } else if (e.key === 'Tab' && !e.shiftKey) {
+    // v0.3.2：從身分證 Tab → 直接跳下一列姓名（性別/檢驗對象/採檢日期會自動帶）
+    if (t.classList.contains('r-id')) {
+      e.preventDefault();
+      const nextTr = tr.nextElementSibling || addRowAndReturn();
+      moveToCell(nextTr, 2);
+      return;
+    }
     const allInputs = tbody.querySelectorAll('input, select');
     if (allInputs[allInputs.length - 1] === t) {
       e.preventDefault();
