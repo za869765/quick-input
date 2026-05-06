@@ -9,16 +9,29 @@ export async function onRequestGet({ env, request }) {
   }
   try {
     // SUBSTR start position is 1-based; prefix.length+1 = first char after prefix
-    const sql = `
-      SELECT MAX(CAST(SUBSTR(no, ?) AS INTEGER)) AS max_serial
-      FROM cases WHERE no LIKE ?
-    `;
-    const { results } = await env.DB.prepare(sql).bind(prefix.length + 1, prefix + '%').all();
-    const maxSerial = results[0]?.max_serial || 0;
+    // v0.3.4：cases + cases_history 雙表取 MAX，避免被刪除的編號被重用
+    //   - 沒寫過 history 的舊資料庫也安全（COALESCE 把 NULL 當 0）
+    //   - cases_history 表不存在時走 catch，回退到只看 cases
+    let maxFromCases = 0, maxFromHistory = 0;
+    {
+      const r = await env.DB.prepare(
+        'SELECT MAX(CAST(SUBSTR(no, ?) AS INTEGER)) AS m FROM cases WHERE no LIKE ?'
+      ).bind(prefix.length + 1, prefix + '%').all();
+      maxFromCases = r.results?.[0]?.m || 0;
+    }
+    try {
+      const r = await env.DB.prepare(
+        'SELECT MAX(CAST(SUBSTR(no, ?) AS INTEGER)) AS m FROM cases_history WHERE no LIKE ?'
+      ).bind(prefix.length + 1, prefix + '%').all();
+      maxFromHistory = r.results?.[0]?.m || 0;
+    } catch (_) { /* 表不存在就跳過 */ }
+    const maxSerial = Math.max(maxFromCases, maxFromHistory);
     return json({
       ok: true,
       prefix,
       maxSerial,
+      maxFromCases,
+      maxFromHistory,
       nextSerial: maxSerial + 1,
       nextNo: prefix + String(maxSerial + 1).padStart(4, '0')
     });

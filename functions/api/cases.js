@@ -169,11 +169,32 @@ export async function onRequestDelete({ request, env }) {
   const no = url.searchParams.get('no');
   if (!id && !no) return json({ ok: false, err: 'need id or no' }, 400);
   try {
-    let stmt;
-    if (id) stmt = env.DB.prepare('DELETE FROM cases WHERE id = ?').bind(parseInt(id, 10));
-    else stmt = env.DB.prepare('DELETE FROM cases WHERE no = ?').bind(no);
-    const r = await stmt.run();
-    return json({ ok: true, changes: r.meta?.changes || 0 });
+    // v0.3.4：刪除前先寫一份 history snapshot（reason='delete'），讓誤刪可救回
+    // 確保 cases_history 表存在（首次刪除時自動建）
+    await env.DB.batch([
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS cases_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id INTEGER, no TEXT NOT NULL,
+        snapshot_json TEXT NOT NULL,
+        replaced_at INTEGER DEFAULT (strftime('%s','now')),
+        reason TEXT
+      )`),
+      env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_history_no ON cases_history(no)`),
+    ]);
+
+    const old = id
+      ? await env.DB.prepare('SELECT * FROM cases WHERE id = ?').bind(parseInt(id, 10)).first()
+      : await env.DB.prepare('SELECT * FROM cases WHERE no = ?').bind(no).first();
+    if (!old) return json({ ok: true, changes: 0, snapshot: false });
+
+    const stmts = [
+      env.DB.prepare('INSERT INTO cases_history (case_id, no, snapshot_json, reason) VALUES (?,?,?,?)')
+        .bind(old.id, old.no, JSON.stringify(old), 'delete'),
+      env.DB.prepare('DELETE FROM cases WHERE id = ?').bind(old.id),
+    ];
+    const result = await env.DB.batch(stmts);
+    const changes = result[1]?.meta?.changes || 0;
+    return json({ ok: true, changes, snapshot: true, snapshot_no: old.no });
   } catch (e) {
     return json({ ok: false, err: e.message }, 500);
   }
