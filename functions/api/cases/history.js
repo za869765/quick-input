@@ -55,6 +55,15 @@ export async function onRequestPost({ request, env }) {
       .bind(snap.no)
       .first();
 
+    /* v0.3.6 M5：冪等保護 — 若 current 與 snapshot 內容已相同，直接 return 不重寫 history */
+    if (current) {
+      const compareKeys = ['mode','name','consult','birth','id_no','sex','target','sample_date','reason','unit','send_date'];
+      const same = compareKeys.every(k => (current[k] || null) === (snap[k] || null));
+      if (same) {
+        return json({ ok: true, restored_no: snap.no, replaced_current: true, idempotent_skip: true });
+      }
+    }
+
     const stmts = [];
     if (current) {
       stmts.push(env.DB

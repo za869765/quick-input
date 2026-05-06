@@ -72,6 +72,17 @@ export async function onRequestPost({ request, env }) {
   const rows = raw.map(normalize).filter(r => r.no);
   if (rows.length === 0) return json({ ok: false, err: 'no valid rows (missing no)' }, 400);
 
+  // v0.3.6 M4：同 batch 內若有重複 no 直接拒絕（避免 INSERT/UPDATE 混亂導致 D1 batch fail）
+  const seenNo = new Set();
+  const dups = [];
+  for (const r of rows) {
+    if (seenNo.has(r.no)) dups.push(r.no);
+    else seenNo.add(r.no);
+  }
+  if (dups.length) {
+    return json({ ok: false, err: '同批次重複編號：' + Array.from(new Set(dups)).join(', ') + '（請先去重再送）' }, 400);
+  }
+
   // Phase 0：idempotent 自動建 cases_history 表（讓使用者不必手動跑 migration SQL）
   try {
     await env.DB.batch([

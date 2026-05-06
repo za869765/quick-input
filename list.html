@@ -135,6 +135,7 @@
     font-size: 10.5px; font-weight: 600; margin-right: 6px;
   }
   .history-entry .h-meta .reason.restore { background: #2e7d32; }
+  .history-entry .h-meta .reason.delete { background: #c62828; }
   .history-entry pre {
     background: #fff; border: 1px solid #e9ecef; padding: 6px 8px; margin: 0 0 6px;
     font-size: 11px; max-height: 140px; overflow: auto; white-space: pre-wrap;
@@ -290,7 +291,7 @@
   </div>
 </div>
 
-<div class="ver">v0.3.5</div>
+<div class="ver">v0.3.6</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -469,20 +470,29 @@ function closeEdit() {
   $('editModal').classList.remove('show');
 }
 
+/* v0.3.6 M1：民國日期 padStart 正規化（避免 115/05/6 字串排序錯亂）
+   yyy/m/d → yyy/0m/0d；yyy/mm/dd 維持；西元 yyyy/m/d 也補 0 */
+function normalizeMinguoDate(s) {
+  if (!s) return s;
+  const m = String(s).trim().match(/^(\d{1,4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (!m) return s;
+  return m[1] + '/' + String(m[2]).padStart(2,'0') + '/' + String(m[3]).padStart(2,'0');
+}
+
 $('btnSaveEdit').addEventListener('click', async () => {
   const payload = [{
     no: $('ed_no').value.trim(),
     mode: $('ed_mode').value,
     name: $('ed_name').value.trim() || null,
     consult: $('ed_consult').value.trim() || null,
-    birth: $('ed_birth').value.trim() || null,
+    birth: normalizeMinguoDate($('ed_birth').value.trim()) || null,
     id: $('ed_id_no').value.trim() || null,
     sex: $('ed_sex').value || null,
     target: $('ed_target').value.trim() || null,
-    sampleDate: $('ed_sample_date').value.trim() || null,
+    sampleDate: normalizeMinguoDate($('ed_sample_date').value.trim()) || null,
     reason: $('ed_reason').value.trim() || null,
     unit: $('ed_unit').value.trim() || null,
-    sendDate: $('ed_send_date').value.trim() || null
+    sendDate: normalizeMinguoDate($('ed_send_date').value.trim()) || null
   }];
   try {
     const r = await fetch('/api/cases', {
@@ -520,13 +530,30 @@ async function renderHistory(no, rows) {
     $('historyList').innerHTML = '<div class="placeholder">這筆編號從未被覆蓋過</div>';
     return;
   }
+  /* v0.3.6 H2：先看現在 cases 裡是否有同 no 的記錄；若有 + 歷史中有 reason='delete'
+     表示「該編號被刪後又給新個案重用」，還原會覆蓋新個案資料，需要警示 */
+  const cur = await fetch('/api/cases?prefix=' + encodeURIComponent(no) + '&limit=1').then(r=>r.json()).catch(() => null);
+  const currentRow = (cur && cur.rows && cur.rows[0]) || null;
+  const hasDeleted = rows.some(r => r.reason === 'delete');
+  const isReused = !!currentRow && hasDeleted;
+  const reuseWarn = isReused
+    ? `<div style="background:#fff3e0; border:2px solid #ef6c00; border-radius:6px; padding:10px 14px; margin-bottom:10px; font-size:13px; color:#bf360c;">
+         <b>⚠ 注意：此編號曾被刪除後又重新使用</b><br>
+         目前該編號是新的受檢人（${esc(currentRow.name || currentRow.consult || '無姓名/代碼')}）。<br>
+         還原 reason=delete 的舊版本會把「現在的新受檢人資料」覆蓋掉，請務必確認。
+       </div>`
+    : '';
+
   // 同步抓每筆的 snapshot
   const detailFetches = rows.map(r => fetch('/api/cases/history?id=' + r.id).then(x => x.json()).catch(() => null));
   const details = await Promise.all(detailFetches);
   const html = rows.map((r, i) => {
     const detail = details[i];
     const snap = detail?.snapshot || {};
-    const reasonClass = (r.reason === 'restore') ? 'restore' : '';
+    const reasonClass = r.reason === 'restore' ? 'restore' : (r.reason === 'delete' ? 'delete' : '');
+    /* v0.3.6 H2：若是 delete 且現在 no 已被新人使用，rcw 警示鎖在按鈕上提示 */
+    const btnClass = (r.reason === 'delete' && isReused) ? 'btn-danger' : 'btn-success';
+    const btnLabel = (r.reason === 'delete' && isReused) ? '⚠ 還原（覆蓋目前資料）' : '↩ 還原為此版本';
     return '<div class="history-entry">' +
       '<div class="h-meta">' +
         '<span class="reason ' + reasonClass + '">' + esc(r.reason || 'upsert') + '</span>' +
@@ -538,14 +565,22 @@ async function renderHistory(no, rows) {
         sample_date: snap.sample_date, reason: snap.reason,
         unit: snap.unit, send_date: snap.send_date
       }, null, 2)) + '</pre>' +
-      '<button class="btn-small btn-success btn" onclick="doRestore(' + r.id + ', \'' + esc(no) + '\')">↩ 還原為此版本</button>' +
+      '<button class="btn-small ' + btnClass + ' btn" onclick="doRestore(' + r.id + ', \'' + esc(no) + '\', ' + (isReused ? 'true' : 'false') + ')">' + btnLabel + '</button>' +
     '</div>';
   }).join('');
-  $('historyList').innerHTML = html;
+  $('historyList').innerHTML = reuseWarn + html;
 }
 
-async function doRestore(historyId, no) {
-  if (!confirm('確定要把編號 ' + no + ' 還原成這個版本嗎？\n\n（當前版本會自動存進歷史，可以再還原回去）')) return;
+async function doRestore(historyId, no, isReused) {
+  /* v0.3.6 H2：被重用的 no 還原前要二次確認 */
+  let msg = '確定要把編號 ' + no + ' 還原成這個版本嗎？\n\n（當前版本會自動存進歷史，可以再還原回去）';
+  if (isReused) {
+    msg = '⚠ 警示：此編號（' + no + '）已被新個案重新使用！\n\n' +
+          '還原舊版本會把「目前的新受檢人」資料覆蓋掉，舊版本變成 cases 裡的最新版。\n' +
+          '雖然新受檢人會自動進歷史可再還原，但建議先到 list.html 確認新受檢人姓名後再操作。\n\n' +
+          '確定要繼續嗎？';
+  }
+  if (!confirm(msg)) return;
   try {
     const r = await fetch('/api/cases/history', {
       method: 'POST',
