@@ -200,7 +200,6 @@
   </h2>
 
   <div class="actions">
-    <button class="btn btn-secondary" id="btnAdd5">+ 加 5 列</button>
     <button class="btn btn-danger" id="btnClear">清空</button>
     <span class="hint" style="margin:0;align-self:center">資料自動暫存（每次輸入即存、進入自動載入）</span>
   </div>
@@ -222,7 +221,7 @@
 </div>
 
 </div>
-<div class="ver">v0.2.5</div>
+<div class="ver">v0.2.6</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -748,7 +747,11 @@ tbody.addEventListener('keydown', function(e) {
 
   if (e.key === 'Enter') {
     e.preventDefault();
-    moveToCell(tr.nextElementSibling || addRowAndReturn(), cellIdx);
+    // 本列最後一個輸入欄按 Enter → 跳到下一列第一個資料格（cellIdx 2，跳過 idx 與編號）
+    const inputsInRow = tr.querySelectorAll('input, select');
+    const isLastInRow = inputsInRow.length && inputsInRow[inputsInRow.length - 1] === t;
+    const nextTr = tr.nextElementSibling || addRowAndReturn();
+    moveToCell(nextTr, isLastInRow ? 2 : cellIdx);
   } else if (e.key === 'ArrowDown' && t.tagName === 'INPUT') {
     e.preventDefault();
     if (tr.nextElementSibling) moveToCell(tr.nextElementSibling, cellIdx);
@@ -1037,10 +1040,6 @@ function toast(msg) {
 // ================================================================
 // 事件
 // ================================================================
-$('btnAdd5').addEventListener('click', () => {
-  for (let i = 0; i < 5; i++) addRow();
-  autoSave();
-});
 $('btnClear').addEventListener('click', () => {
   if (confirm('確定清空所有資料？流水號會保留繼續編號。')) {
     tbody.innerHTML = ''; rowSeq = 0;
@@ -1064,22 +1063,41 @@ function checkYearReset() {
   localStorage.setItem('quickInputLastYear', curYear);
 }
 
-// 從雲端取得最大流水號 → 自動設下一筆 + 重編空列
+// 從雲端取得最大流水號 → 無條件取 max(雲端,本地)，每次都同步
 async function fetchMaxFromCloud() {
   const prefix = $('hdr_no_prefix').value.trim();
-  if (!prefix) return;
+  if (!prefix) {
+    console.warn('[fetchMaxFromCloud] no prefix, skip');
+    return;
+  }
   try {
     const r = await fetch('/api/cases/max-no?prefix=' + encodeURIComponent(prefix));
-    if (!r.ok) return;
-    const d = await r.json();
-    if (!d.ok || typeof d.nextSerial !== 'number') return;
-    const localNext = nextSerial();
-    if (d.nextSerial > localNext) {
-      setNextSerial(d.nextSerial);
-      renumberEmptyRows();
-      toast('已從雲端載入下一筆編號 ' + d.nextNo);
+    console.log('[fetchMaxFromCloud] status', r.status);
+    if (r.status === 401) {
+      console.warn('[fetchMaxFromCloud] unauthorized — 請重新登入');
+      return;
     }
-  } catch(_) {}
+    if (!r.ok) {
+      console.warn('[fetchMaxFromCloud] http not ok', r.status);
+      return;
+    }
+    const d = await r.json();
+    console.log('[fetchMaxFromCloud] resp', d);
+    if (!d.ok || typeof d.nextSerial !== 'number') {
+      console.warn('[fetchMaxFromCloud] bad payload', d);
+      return;
+    }
+    const localNext = nextSerial();
+    const merged = Math.max(d.nextSerial, localNext);
+    console.log('[fetchMaxFromCloud] cloud=' + d.nextSerial + ' local=' + localNext + ' → setNext=' + merged);
+    setNextSerial(merged);
+    renumberEmptyRows();
+    if (d.nextSerial > localNext) {
+      toast('已從雲端載入下一筆編號 ' + buildNo(merged));
+    }
+  } catch (e) {
+    console.error('[fetchMaxFromCloud] error', e);
+  }
 }
 
 // 把目前所有「空白列」(沒姓名/身分證/諮詢代碼) 用最新流水號重編
