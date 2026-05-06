@@ -221,7 +221,7 @@
 </div>
 
 </div>
-<div class="ver">v0.2.6</div>
+<div class="ver">v0.2.7</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -1064,28 +1064,29 @@ function checkYearReset() {
 }
 
 // 從雲端取得最大流水號 → 無條件取 max(雲端,本地)，每次都同步
+// 回傳 cloud info 物件（含 maxSerial），失敗回 null
 async function fetchMaxFromCloud() {
   const prefix = $('hdr_no_prefix').value.trim();
   if (!prefix) {
     console.warn('[fetchMaxFromCloud] no prefix, skip');
-    return;
+    return null;
   }
   try {
     const r = await fetch('/api/cases/max-no?prefix=' + encodeURIComponent(prefix));
     console.log('[fetchMaxFromCloud] status', r.status);
     if (r.status === 401) {
       console.warn('[fetchMaxFromCloud] unauthorized — 請重新登入');
-      return;
+      return null;
     }
     if (!r.ok) {
       console.warn('[fetchMaxFromCloud] http not ok', r.status);
-      return;
+      return null;
     }
     const d = await r.json();
     console.log('[fetchMaxFromCloud] resp', d);
     if (!d.ok || typeof d.nextSerial !== 'number') {
       console.warn('[fetchMaxFromCloud] bad payload', d);
-      return;
+      return null;
     }
     const localNext = nextSerial();
     const merged = Math.max(d.nextSerial, localNext);
@@ -1095,9 +1096,45 @@ async function fetchMaxFromCloud() {
     if (d.nextSerial > localNext) {
       toast('已從雲端載入下一筆編號 ' + buildNo(merged));
     }
+    return d;
   } catch (e) {
     console.error('[fetchMaxFromCloud] error', e);
+    return null;
   }
+}
+
+// init 專用：把編號已被雲端佔用的「非空列」重編到下一可用號
+// 避免 localStorage 舊草稿在 UPSERT 時覆蓋雲端真實受檢人資料
+function reconcileSerialConflicts(cloudMaxSerial) {
+  if (!cloudMaxSerial) return 0;
+  const prefix = $('hdr_no_prefix').value.trim();
+  let serial = Math.max(cloudMaxSerial + 1, nextSerial());
+  let bumped = 0;
+  Array.from(tbody.children).forEach(tr => {
+    const noEl = tr.querySelector('.r-no');
+    if (!noEl) return;
+    const cur = noEl.value.trim();
+    if (!cur.startsWith(prefix)) return;
+    const curSerial = parseInt(cur.slice(prefix.length), 10);
+    if (!curSerial || curSerial > cloudMaxSerial) return; // 大於雲端最大號的留著（新編未送）
+    // 跳過完全空白列（renumberEmptyRows 已處理）
+    const nameEl = tr.querySelector('.r-name');
+    const idEl = tr.querySelector('.r-id');
+    const consultEl = tr.querySelector('.r-consult');
+    const isEmpty = (!nameEl || !nameEl.value.trim()) &&
+                    (!idEl || !idEl.value.trim()) &&
+                    (!consultEl || !consultEl.value.trim());
+    if (isEmpty) return;
+    noEl.value = buildNo(serial);
+    serial++;
+    bumped++;
+  });
+  setNextSerial(serial);
+  if (bumped > 0) {
+    console.log('[reconcile] 重編 ' + bumped + ' 筆衝突列至 ' + (cloudMaxSerial + 1) + '+');
+    toast('⚠ 已重編 ' + bumped + ' 筆舊草稿編號（避免覆蓋雲端資料）');
+  }
+  return bumped;
 }
 
 // 把目前所有「空白列」(沒姓名/身分證/諮詢代碼) 用最新流水號重編
@@ -1133,9 +1170,15 @@ async function init() {
   const loaded = tryAutoLoad();
 
   // 2. 等雲端最大號回來才繼續（會更新 nextSerial 並重編空列）
+  let cloudInfo = null;
   try {
-    await fetchMaxFromCloud();
+    cloudInfo = await fetchMaxFromCloud();
   } catch(_) {}
+
+  // 2.5 把 localStorage 殘留的舊草稿（編號已被雲端佔用）重編到新號
+  if (cloudInfo && typeof cloudInfo.maxSerial === 'number') {
+    reconcileSerialConflicts(cloudInfo.maxSerial);
+  }
 
   // 3. 補空列至 10 筆，此時用的是最新 nextSerial
   while (tbody.children.length < 10) addRow();
