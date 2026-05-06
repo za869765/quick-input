@@ -164,8 +164,7 @@
 
 <div class="wrap">
 
-<h1>送驗單快速輸入器 <span style="font-size:13px;color:#6c757d;font-weight:400">— 比 Excel 更聰明</span></h1>
-<div class="hint">輸入個資後產出送驗單 XLSX（含 列印分頁 + 系統上傳分頁）</div>
+<h1>送驗單快速輸入器</h1>
 
 <!-- 抬頭（可摺疊） -->
 <div class="panel" id="panelHdr">
@@ -219,16 +218,11 @@
   <h2 style="cursor:default">產出</h2>
   <div class="actions">
     <button class="btn btn-primary" id="btnExport">⬇ 下載送驗單 XLSX</button>
-    <button class="btn btn-secondary" id="btnSyncCloud" title="把目前清單存到雲端">☁ 同步到雲端</button>
-  </div>
-  <div class="hint" style="margin-top:8px">
-    產出 XLSX 包含：1. <strong>送驗單</strong>（列印紙本）2. <strong>醫事檢驗檢體列表</strong>（⚡ 系統上傳用）<br>
-    雲端同步後流水號會自動接續，跨裝置可用。
   </div>
 </div>
 
 </div>
-<div class="ver">v0.2.3</div>
+<div class="ver">v0.2.5</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -247,6 +241,96 @@ function mguDate(d) {
   return (d.getFullYear() - 1911) + '/' +
     String(d.getMonth() + 1).padStart(2, '0') + '/' +
     String(d.getDate()).padStart(2, '0');
+}
+
+function todayWestern() {
+  const d = new Date();
+  return d.getFullYear() + '/' +
+    String(d.getMonth() + 1).padStart(2, '0') + '/' +
+    String(d.getDate()).padStart(2, '0');
+}
+function westernYesterday() {
+  const d = new Date(); d.setDate(d.getDate() - 1);
+  return d.getFullYear() + '/' +
+    String(d.getMonth() + 1).padStart(2, '0') + '/' +
+    String(d.getDate()).padStart(2, '0');
+}
+
+// 西元年/民國年互轉 helpers
+function westernToMinguo(d) {
+  if (!d) return '';
+  const m = String(d).match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (m) {
+    const y = parseInt(m[1], 10);
+    if (y >= 1912 && y <= 2099) {
+      return (y - 1911) + '/' + m[2].padStart(2,'0') + '/' + m[3].padStart(2,'0');
+    }
+  }
+  return d;
+}
+
+// 西元日期模式（出生欄）— 一律輸出 yyyy/MM/DD
+// 智慧辨識：19890605 → 西元；980505 → 民國 98 年
+function smartDateWestern(input) {
+  if (!input) return '';
+  let v = String(input).trim();
+  if (!v) return '';
+  if (/^(t|today|今天)$/i.test(v)) return todayWestern();
+  if (/^(y|yesterday|昨天|昨)$/i.test(v)) return westernYesterday();
+
+  // 帶分隔符（/, -, .）— 看年份位數判斷
+  const parts = v.split(/[\.\-\/]/).map(x => x.trim()).filter(x => x);
+  if (parts.length === 3) {
+    const yStr = parts[0];
+    const mm = parts[1].padStart(2,'0');
+    const dd = parts[2].padStart(2,'0');
+    if (yStr.length === 4) {
+      const y = parseInt(yStr, 10);
+      if (y >= 1900 && y <= 2099) return y + '/' + mm + '/' + dd;
+    }
+    if (yStr.length <= 3) {
+      return (parseInt(yStr, 10) + 1911) + '/' + mm + '/' + dd;
+    }
+    return yStr + '/' + mm + '/' + dd;
+  }
+
+  const digits = v.replace(/\D/g, '');
+
+  // 8 碼：開頭 19/20 → 西元 yyyymmdd
+  if (digits.length === 8) {
+    const y = parseInt(digits.slice(0,4), 10);
+    if (y >= 1900 && y <= 2099) {
+      return y + '/' + digits.slice(4,6) + '/' + digits.slice(6);
+    }
+    return v;
+  }
+  // 7 碼：民國 yyymmdd（民國 100 年以後）
+  if (digits.length === 7) {
+    return (parseInt(digits.slice(0,3), 10) + 1911) + '/' + digits.slice(3,5) + '/' + digits.slice(5);
+  }
+  // 6 碼：民國 yymmdd（如 980505 → 民國 98 年）
+  if (digits.length === 6) {
+    return (parseInt(digits.slice(0,2), 10) + 1911) + '/' + digits.slice(2,4) + '/' + digits.slice(4);
+  }
+  // 5 碼：民國 YYMDD（單位數月份）
+  if (digits.length === 5) {
+    const m = parseInt(digits.slice(2,3), 10);
+    if (m >= 1 && m <= 9) {
+      return (parseInt(digits.slice(0,2), 10) + 1911) + '/0' + digits.slice(2,3) + '/' + digits.slice(3,5);
+    }
+    return v;
+  }
+  // 4 碼：1900-2099 → 西元年；其他 → 今年的 MMDD
+  if (digits.length === 4) {
+    const num = parseInt(digits, 10);
+    if (num >= 1900 && num <= 2099) return String(num);
+    return new Date().getFullYear() + '/' + digits.slice(0,2) + '/' + digits.slice(2);
+  }
+  // 2~3 碼：民國年 → 西元
+  if (digits.length === 2 || digits.length === 3) {
+    return String(parseInt(digits, 10) + 1911);
+  }
+  return v;
 }
 
 function smartDate(input) {
@@ -362,6 +446,18 @@ function genderFromId(id) {
   return '';
 }
 
+// 即時性別偵測：只要輸入第 2 碼就能判斷男女
+function genderFromPartialId(id) {
+  if (!id || id.length < 2) return '';
+  if (!/^[A-Z]$/.test(id[0])) return '';
+  const c = id[1];
+  if (c === '1' || c === '8') return '1';
+  if (c === '2' || c === '9') return '2';
+  if (c === 'A' || c === 'C') return '1';
+  if (c === 'B' || c === 'D') return '2';
+  return '';
+}
+
 // ================================================================
 // 模式 + 欄位定義
 // ================================================================
@@ -369,8 +465,8 @@ const COLUMNS = {
   named: [
     { key: 'no', label: '送驗編號', width: 140, mono: true, auto: true },
     { key: 'name', label: '姓名', width: 100, required: true },
-    { key: 'birth', label: '出生年月日', width: 130, ph: '600616 或 60/06/16', required: true, date: true },
-    { key: 'id', label: '身分證字號', width: 140, mono: true, ph: '可空', optional: true, idCheck: true, upper: true },
+    { key: 'birth', label: '出生年月日', width: 150, required: true, date: true, western: true },
+    { key: 'id', label: '身分證字號', width: 140, mono: true, idCheck: true, upper: true, blankOk: true },
     { key: 'sex', label: '性別', width: 90, type: 'sex' },
     { key: 'target', label: '檢驗對象', width: 90, type: 'target' },
     { key: 'sampleDate', label: '採檢日期', width: 110, default: 'today', date: true, required: true }
@@ -561,14 +657,19 @@ function validateIdField(input) {
   const tr = input.closest('tr');
   const sexEl = tr ? tr.querySelector('.r-sex') : null;
 
-  if (!v || v.length < 10) {
-    // 空白或不完整 → 解鎖性別欄
-    if (sexEl) {
-      sexEl.disabled = false;
-      sexEl.classList.remove('locked');
+  // 即時性別偵測（每次 input 都重算，刪改也會更新）
+  if (sexEl) {
+    sexEl.disabled = false;
+    sexEl.classList.remove('locked');
+    if (v.length >= 2) {
+      const g = genderFromPartialId(v);
+      sexEl.value = g || '';
+    } else {
+      sexEl.value = '';
     }
-    return;
   }
+
+  if (!v || v.length < 10) return;
 
   const result = checkId(v);
   if (result === true) {
@@ -577,7 +678,7 @@ function validateIdField(input) {
     tip.className = 'tip';
     tip.textContent = '✓';
     td.appendChild(tip);
-    // 自動帶性別 + 鎖定
+    // 完整且有效 → 鎖定性別
     const g = genderFromId(v);
     if (g && sexEl) {
       sexEl.value = g;
@@ -590,18 +691,14 @@ function validateIdField(input) {
     tip.className = 'tip bad';
     tip.textContent = '✗';
     td.appendChild(tip);
-    // 不可識別 → 解鎖讓使用者手選
-    if (sexEl) {
-      sexEl.disabled = false;
-      sexEl.classList.remove('locked');
-    }
   }
 }
 
 // 日期欄 onBlur 智慧轉換 + flash 提示
 function smartDateField(input) {
   const before = input.value;
-  const after = smartDate(before);
+  const isBirth = input.classList.contains('r-birth');
+  const after = isBirth ? smartDateWestern(before) : smartDate(before);
   if (after !== before) {
     input.value = after;
     input.classList.remove('flash-converted');
@@ -799,7 +896,9 @@ function exportXlsx() {
     );
     rows.forEach(r => {
       const tgt = r.target || hdr.target || '';
-      sheet1Data.push([r.seq, r.no, r.name, r.birth, r.id || '', r.sex, '', '', '', r.sampleDate, '', '', '', tgt]);
+      // 送驗單列印用民國年（從西元轉回）
+      const birthMG = westernToMinguo(r.birth);
+      sheet1Data.push([r.seq, r.no, r.name, birthMG, r.id || '', r.sex, '', '', '', r.sampleDate, '', '', '', tgt]);
     });
   } else {
     sheet1Data.push(
@@ -834,6 +933,38 @@ function exportXlsx() {
   const tail = (currentMode === 'named' ? '具篩' : '匿篩') + '送驗';
   const filename = dateStr + reason + tail + '.xlsx';
   XLSX.writeFile(wb, filename);
+
+  // 下載後自動上傳雲端（背景，不擋使用者）
+  syncRowsToCloud(rows, hdr).catch(e => console.warn('auto sync failed:', e));
+}
+
+async function syncRowsToCloud(rows, hdr) {
+  const payload = rows.map(r => ({
+    no: r.no, mode: currentMode,
+    name: r.name || null, consult: r.consult || null,
+    birth: r.birth || null, id: r.id || null, sex: r.sex || null,
+    target: r.target || hdr.target || null,
+    sampleDate: r.sampleDate || null,
+    reason: hdr.reason || null,
+    unit: hdr.unit || null,
+    sendDate: hdr.sendDate || null
+  }));
+  try {
+    const resp = await fetch('/api/cases', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const d = await resp.json();
+    if (d.ok) {
+      toast('✓ 已下載 XLSX + 雲端同步 ' + d.inserted + ' 筆');
+      fetchMaxFromCloud();
+    } else {
+      toast('⚠ 雲端同步失敗：' + (d.err || 'unknown'));
+    }
+  } catch (e) {
+    toast('⚠ 雲端同步連線失敗');
+  }
 }
 
 // ================================================================
@@ -918,37 +1049,6 @@ $('btnClear').addEventListener('click', () => {
   }
 });
 $('btnExport').addEventListener('click', exportXlsx);
-$('btnSyncCloud').addEventListener('click', async () => {
-  const hdr = getHeader();
-  let rows = collectRows().filter(r => r.name || r.id || r.consult);
-  if (rows.length === 0) { alert('沒有可同步的資料'); return; }
-  const payload = rows.map(r => ({
-    no: r.no, mode: currentMode,
-    name: r.name || null, consult: r.consult || null,
-    birth: r.birth || null, id: r.id || null, sex: r.sex || null,
-    target: r.target || hdr.target || null,
-    sampleDate: r.sampleDate || null,
-    reason: hdr.reason || null,
-    unit: hdr.unit || null,
-    sendDate: hdr.sendDate || null
-  }));
-  try {
-    const resp = await fetch('/api/cases', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const d = await resp.json();
-    if (d.ok) {
-      toast('已同步 ' + d.inserted + ' 筆到雲端');
-      fetchMaxFromCloud(); // 同步後更新下一筆
-    } else {
-      alert('同步失敗：' + (d.err || 'unknown'));
-    }
-  } catch (e) {
-    alert('連線失敗：' + e.message + '\n（D1 是否已綁定？）');
-  }
-});
 
 // 起始：年度區碼預設「當前民國年 + 0505」
 function defaultPrefix() {
