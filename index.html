@@ -92,6 +92,13 @@
     box-shadow: 0 0 0 1px #ffc107 inset;
   }
   tbody td input.mono { font-family: Consolas, Menlo, monospace; font-weight: 600; }
+  /* v0.3.1：送驗編號僅顯示 */
+  tbody td input.r-no {
+    background: #f8f9fa; color: #495057; cursor: default; user-select: text;
+  }
+  tbody td input.r-no:focus {
+    border: 3px solid transparent; background: #f8f9fa; box-shadow: none;
+  }
   tbody td input.id-ok { background: #f1f8e9; }
   tbody td input.id-err { background: #ffebee; border-color: #e53935 !important; }
   tbody td input.flash-converted {
@@ -224,7 +231,7 @@
 </div>
 
 </div>
-<div class="ver">v0.3.0</div>
+<div class="ver">v0.3.1</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -595,7 +602,9 @@ function addRow(data) {
       const cls = 'r-' + c.key + (c.mono ? ' mono' : '');
       const ph = c.ph ? ' placeholder="' + c.ph + '"' : '';
       const attrs = (c.upper ? ' style="text-transform:uppercase"' : '');
-      html += '<td><input class="' + cls + '" value="' + esc(v) + '"' + ph + attrs + '></td>';
+      // v0.3.1：送驗編號僅顯示，不開放手動修改（系統自動分配）
+      const readonly = (c.key === 'no') ? ' readonly tabindex="-1"' : '';
+      html += '<td><input class="' + cls + '" value="' + esc(v) + '"' + ph + attrs + readonly + '></td>';
     }
   });
   html += '<td class="action"><button title="刪除此列" onclick="this.closest(\'tr\').remove();updateEmpty()">×</button></td>';
