@@ -221,7 +221,7 @@
 </div>
 
 </div>
-<div class="ver">v0.2.9</div>
+<div class="ver">v0.2.10</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -850,11 +850,16 @@ document.querySelectorAll('#modeSwitch label').forEach(label => {
     this.querySelector('input').checked = true;
     currentMode = newMode;
     // v0.1.12：直接切換，不彈窗。清空表格但保留流水號
+    // v0.2.10：保留切換前每列原本的編號，避免 addRow() 連續 bump 讓序號 +10
+    const oldNos = Array.from(tbody.querySelectorAll('.r-no')).map(e => e.value);
     tbody.innerHTML = '';
     rowSeq = 0;
     renderHead();
     updateTargetOptions();
-    for (let i = 0; i < 10; i++) addRow();
+    for (let i = 0; i < 10; i++) {
+      // 第 1~10 列沿用原本該位置編號；如果原本不足 10 列才走自動分號
+      addRow(oldNos[i] ? { no: oldNos[i] } : undefined);
+    }
     autoSave();
   });
 });
