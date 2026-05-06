@@ -221,7 +221,7 @@
 </div>
 
 </div>
-<div class="ver">v0.2.8</div>
+<div class="ver">v0.2.9</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -978,9 +978,11 @@ let saveTimer;
 function autoSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
+    // v0.2.9：noNext 不再持久化（衍生值，每次 init 由 cloud_max+used 重算）
+    // 過去每次 refresh 都會把 noNext 推大，導致序號每 refresh 跳 10
     const draft = {
       mode: currentMode, header: getHeader(),
-      noPrefix: $('hdr_no_prefix').value, noNext: $('hdr_no_next').value,
+      noPrefix: $('hdr_no_prefix').value,
       rows: collectRows(), savedAt: new Date().toISOString()
     };
     try { localStorage.setItem('quickInputDraft', JSON.stringify(draft)); } catch(_){}
@@ -1007,7 +1009,7 @@ function tryAutoLoad() {
       $('hdr_target').value = d.header.target || '';
     }
     if (d.noPrefix) $('hdr_no_prefix').value = d.noPrefix;
-    if (d.noNext) $('hdr_no_next').value = d.noNext;
+    // v0.2.9：noNext 不還原 — 每次都讓 fetchMaxFromCloud + renumberEmptyRows 重算
     tbody.innerHTML = '';
     rowSeq = 0;
     renderHead();
@@ -1137,23 +1139,38 @@ function reconcileSerialConflicts(cloudMaxSerial) {
   return bumped;
 }
 
-// 把目前所有「空白列」(沒姓名/身分證/諮詢代碼) 用最新流水號重編
+// v0.2.9：判斷單一列是否為「無資料的空白列」
+function isRowEmpty(tr) {
+  const nameEl = tr.querySelector('.r-name');
+  const idEl = tr.querySelector('.r-id');
+  const consultEl = tr.querySelector('.r-consult');
+  return (!nameEl || !nameEl.value.trim()) &&
+         (!idEl || !idEl.value.trim()) &&
+         (!consultEl || !consultEl.value.trim());
+}
+
+// 把目前所有「空白列」用最新流水號重編；
+// v0.2.9：collision-aware — 跳過非空列已佔用的序號，避免重複
 function renumberEmptyRows() {
+  const prefix = $('hdr_no_prefix').value.trim();
+  // 收集非空列已用的流水號（不能再被指派給空白列）
+  const used = new Set();
+  Array.from(tbody.children).forEach(tr => {
+    if (isRowEmpty(tr)) return;
+    const noEl = tr.querySelector('.r-no');
+    if (!noEl || !noEl.value.startsWith(prefix)) return;
+    const s = parseInt(noEl.value.slice(prefix.length), 10);
+    if (s) used.add(s);
+  });
   let serial = nextSerial();
   Array.from(tbody.children).forEach(tr => {
-    const nameEl = tr.querySelector('.r-name');
-    const idEl = tr.querySelector('.r-id');
-    const consultEl = tr.querySelector('.r-consult');
-    const isEmpty = (!nameEl || !nameEl.value.trim()) &&
-                    (!idEl || !idEl.value.trim()) &&
-                    (!consultEl || !consultEl.value.trim());
-    if (isEmpty) {
-      const noEl = tr.querySelector('.r-no');
-      if (noEl) {
-        noEl.value = buildNo(serial);
-        serial++;
-      }
-    }
+    if (!isRowEmpty(tr)) return;
+    const noEl = tr.querySelector('.r-no');
+    if (!noEl) return;
+    while (used.has(serial)) serial++;
+    noEl.value = buildNo(serial);
+    used.add(serial);
+    serial++;
   });
   setNextSerial(serial);
   autoSave();
