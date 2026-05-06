@@ -290,7 +290,7 @@
   </div>
 </div>
 
-<div class="ver">v0.3.4</div>
+<div class="ver">v0.3.5</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -568,7 +568,7 @@ function closeHistory() {
 
 // ===== 刪除 =====
 async function doDelete(no) {
-  if (!confirm('確定要刪除編號 ' + no + ' ？\n\n刪除前會自動寫入歷史 snapshot（reason=delete），可從歷史還原。\n編號不會被重用（max-no 同時看 cases + cases_history）。')) return;
+  if (!confirm('確定要刪除編號 ' + no + ' ？\n\n刪除前會自動寫入歷史 snapshot（reason=delete），可從歷史還原。\n注意：被刪除的編號會被下一筆新增重新填回（不跳號）。')) return;
   try {
     const r = await fetch('/api/cases?no=' + encodeURIComponent(no), { method: 'DELETE' });
     const d = await r.json();

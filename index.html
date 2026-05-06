@@ -231,7 +231,7 @@
 </div>
 
 </div>
-<div class="ver">v0.3.4</div>
+<div class="ver">v0.3.5</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -896,74 +896,171 @@ function rebuildTable() {
 }
 
 // ================================================================
-// XLSX 產出
+// XLSX 產出（v0.3.5：先存雲端再下載；格式對齊正版送驗單範本）
 // ================================================================
-function exportXlsx() {
+
+// 檢驗對象代碼 → 完整描述（與正版範本「檢驗對象查詢」分頁一致）
+const TARGET_FULL_LABEL = {
+  '1':'警方查獲-黃單(毒癮、性交易服務者及其相對人)',
+  '2':'警方查獲-毒危講習',
+  '3':'藥癮者篩檢其他專案-地檢署',
+  '4':'八大行業、性工作者',
+  '5':'衛生局自行追蹤-梅毒舊案、梅毒通報(不驗RPR)、淋病通報',
+  '6':'局端-受血者(不驗RPR)',
+  '7':'全民-35歲以下(具名)',
+  '8':'全民-36~55歲(含)(具名)',
+  '9':'全民-HIV接觸者',
+  '10':'全民-TB通報共管個案',
+  '11':'匿名篩檢-外展',
+  '12':'匿名篩檢-非外展(社區)',
+  '13':'其他'
+};
+
+// 民國日期 → 西元日期 e.g. '115/05/06' → '2026/5/6'
+function minguoToWestern(s) {
+  if (!s) return '';
+  const m = String(s).trim().match(/^(\d{1,3})\/(\d{1,2})\/(\d{1,2})$/);
+  if (!m) return s;
+  return (parseInt(m[1], 10) + 1911) + '/' + parseInt(m[2], 10) + '/' + parseInt(m[3], 10);
+}
+
+async function exportXlsx() {
   const hdr = getHeader();
   let rows = collectRows();
-  // v0.1.6：自動 filter 空列（沒姓名 + 沒身分證 + 沒諮詢代碼 → 跳過）
   rows = rows.filter(r => r.name || r.id || r.consult);
-  // 重新編號
   rows.forEach((r, i) => r.seq = i + 1);
   if (rows.length === 0) {
     alert('請先輸入至少一筆個案資料（姓名/身分證/諮詢代碼任一）');
     return;
   }
 
+  // === Step 1: 先把資料存進雲端 ===
+  let saveErr = null;
+  try {
+    const r = await syncRowsToCloud(rows, hdr);
+    if (!r || !r.ok) saveErr = (r && r.err) || 'unknown';
+  } catch (e) {
+    saveErr = e.message;
+  }
+  if (saveErr) {
+    if (!confirm('⚠ 雲端儲存失敗：' + saveErr + '\n\n是否仍要下載 XLSX？\n（取消可重試/檢查網路；確定下載仍可手動再上傳）')) return;
+  }
+
+  // === Step 2: 組 workbook（3 個分頁，對齊正版範本）===
   const wb = XLSX.utils.book_new();
   const yearROC = new Date().getFullYear() - 1911;
-  const sheet1Data = [
-    [yearROC + '年度臺南市政府衛生局性病檢驗送驗單'],
-    ['單位名稱：' + hdr.unit, '', '', '', '', '', '', '', '', '', '', '', '送驗日期:' + hdr.sendDate]
-  ];
-  if (currentMode === 'named') {
-    sheet1Data.push(
-      ['號次', '送驗編號', '姓名', '出生\n年月日', '身份證字號', '性別', '', '婚姻', '', '採檢   日期', '檢驗項目(結果)', '', '', '檢驗\n對象'],
-      ['', '', '', '', '', '', '', '', '', '', '梅毒', '愛滋', '', ''],
-      ['', '', '', '', '', '1.男\n2.女', '', '已', '未', '', '梅毒血清抗體檢驗\n快速血漿反應素(RPR)', '化學冷光法\n(Combo Ab+Ag)', '免疫層析法', '']
-    );
-    rows.forEach(r => {
-      const tgt = r.target || hdr.target || '';
-      // 送驗單列印用民國年（從西元轉回）
-      const birthMG = westernToMinguo(r.birth);
-      sheet1Data.push([r.seq, r.no, r.name, birthMG, r.id || '', r.sex, '', '', '', r.sampleDate, '', '', '', tgt]);
-    });
-  } else {
-    sheet1Data.push(
-      ['號次', '送驗編號', '諮詢代碼', '出生\n年月日', '性別', '採檢\n日期', '檢驗項目(結果)', '', '', '檢驗\n對象'],
-      ['', '', '', '', '', '', '梅毒', '愛滋', '', ''],
-      ['', '', '', '', '1.男\n2.女', '', '梅毒血清抗體檢驗\n快速血漿反應素(RPR)', '化學冷光法\n(Combo Ab+Ag)', '免疫層析法', '']
-    );
-    rows.forEach(r => {
-      sheet1Data.push([r.seq, r.no, r.consult, '', '', r.sampleDate, '', '', '', hdr.target]);
-    });
-  }
-  const sheet1 = XLSX.utils.aoa_to_sheet(sheet1Data);
-  XLSX.utils.book_append_sheet(wb, sheet1, '送驗單');
+  const tgtCode = String(rows[0]?.target || hdr.target || '');
 
-  const sheet2Data = [
-    ['申請單位：', hdr.unit],
-    ['採樣單位：', hdr.unit],
-    ['送驗原因：', hdr.reason],
-    ['備註：', ''],
-    ['樣品編號', '樣品名稱', '製造日期', '有效日期', '採樣日期', '檢驗成分編號列表'],
+  // ---- Sheet 1「送驗單」----
+  const ROWS_DATA = rows.length;
+  const s1 = Array.from({ length: 5 + ROWS_DATA }, () => Array(16).fill(''));
+  // 第 1 列：標題（A1:P1 合併）
+  s1[0][0] = yearROC + '年度臺南市政府衛生局性病檢驗送驗單';
+  // 第 2 列：抬頭（A2:H2 / I2:L2 / M2:P2 三段合併）
+  s1[1][0] = '單位名稱：' + (hdr.unit || '');
+  s1[1][8] = '申請單編號：'; // 留空待手填
+  s1[1][12] = '送驗日期:' + (hdr.sendDate || '');
+  // 第 3 列：欄位主標
+  s1[2][0]  = '號次';
+  s1[2][1]  = '送驗編號';
+  s1[2][2]  = '姓名';
+  s1[2][3]  = '出生\n年月日';
+  s1[2][4]  = '性別';
+  s1[2][6]  = '婚姻';
+  s1[2][8]  = '採檢   日期';
+  s1[2][9]  = '連絡電話';
+  s1[2][10] = '身份證字號';
+  s1[2][11] = '檢驗項目(結果)';
+  s1[2][14] = '檢驗\n對象';
+  s1[2][15] = '備註';
+  // 第 4 列：副標
+  s1[3][11] = '梅毒';
+  s1[3][12] = '愛滋';
+  // 第 5 列：細項
+  s1[4][4]  = '1.男\n2.女';
+  s1[4][6]  = '已';
+  s1[4][7]  = '未';
+  s1[4][11] = '梅毒血清抗體檢驗\n快速血漿反應素(RPR)';
+  s1[4][12] = '化學冷光法\n(Combo Ab+Ag)';
+  s1[4][13] = '免疫層析法';
+  // 資料列（第 6 列起）
+  rows.forEach((r, idx) => {
+    const row = s1[5 + idx];
+    row[0] = r.seq;
+    row[1] = r.no;
+    row[2] = currentMode === 'named' ? (r.name || '') : (r.consult || '');
+    if (currentMode === 'named') {
+      row[3] = westernToMinguo(r.birth) || ''; // 出生民國 yy/mm/dd
+      row[4] = r.sex === '1' ? '1男' : (r.sex === '2' ? '2女' : '');
+      row[10] = r.id || '';
+    }
+    row[8]  = minguoToWestern(r.sampleDate) || ''; // 採檢日期西元
+    row[12] = 'V'; // 愛滋 化學冷光法 預設打勾
+    row[14] = r.target || hdr.target || '';
+  });
+
+  const ws1 = XLSX.utils.aoa_to_sheet(s1);
+  ws1['!merges'] = [
+    { s:{r:0,c:0},  e:{r:0,c:15} }, // A1:P1
+    { s:{r:1,c:0},  e:{r:1,c:7}  }, // A2:H2
+    { s:{r:1,c:8},  e:{r:1,c:11} }, // I2:L2
+    { s:{r:1,c:12}, e:{r:1,c:15} }, // M2:P2
+    { s:{r:2,c:0},  e:{r:4,c:0}  }, // A3:A5 號次
+    { s:{r:2,c:1},  e:{r:4,c:1}  }, // B3:B5 送驗編號
+    { s:{r:2,c:2},  e:{r:4,c:2}  }, // C3:C5 姓名
+    { s:{r:2,c:3},  e:{r:4,c:3}  }, // D3:D5 出生
+    { s:{r:2,c:4},  e:{r:3,c:5}  }, // E3:F4 性別
+    { s:{r:4,c:4},  e:{r:4,c:5}  }, // E5:F5 1男2女
+    { s:{r:2,c:6},  e:{r:3,c:7}  }, // G3:H4 婚姻
+    { s:{r:2,c:8},  e:{r:4,c:8}  }, // I3:I5 採檢日期
+    { s:{r:2,c:9},  e:{r:4,c:9}  }, // J3:J5 連絡電話
+    { s:{r:2,c:10}, e:{r:4,c:10} }, // K3:K5 身份證
+    { s:{r:2,c:11}, e:{r:2,c:13} }, // L3:N3 檢驗項目(結果)
+    { s:{r:3,c:12}, e:{r:3,c:13} }, // M4:N4 愛滋
+    { s:{r:2,c:14}, e:{r:4,c:14} }, // O3:O5 檢驗對象
+    { s:{r:2,c:15}, e:{r:4,c:15} }, // P3:P5 備註
+  ];
+  // 每筆資料列 E:F 合併（性別欄佔兩格寬）
+  rows.forEach((_, idx) => {
+    ws1['!merges'].push({ s:{r:5+idx,c:4}, e:{r:5+idx,c:5} });
+  });
+  ws1['!cols'] = [
+    {wch:5},{wch:17},{wch:11},{wch:12},{wch:4},{wch:4},
+    {wch:4},{wch:4},{wch:13},{wch:14},{wch:17},{wch:18},
+    {wch:13},{wch:10},{wch:8},{wch:12}
+  ];
+  XLSX.utils.book_append_sheet(wb, ws1, '送驗單');
+
+  // ---- Sheet 2「醫事檢驗檢體列表」----
+  // 送驗原因規則：M 欄(愛滋) 必有 V → 「愛滋篩檢」；若 L 欄(梅毒)也勾 V 才會 + 梅毒
+  const s2 = [
+    ['申請單位：', hdr.unit || ''],
+    ['採樣單位：', hdr.unit || ''],
+    ['送驗原因：', '愛滋篩檢'], // 預設只勾愛滋；勾了梅毒可改 '梅毒檢驗與愛滋篩檢'
+    ['備註：', TARGET_FULL_LABEL[tgtCode] || tgtCode || ''],
+    ['樣品編號', '樣品名稱', '製造日期', '有效日期', '採樣日期', '檢驗成分編號列表']
   ];
   rows.forEach(r => {
-    const sampleName = (currentMode === 'named') ? r.name : (r.consult || '匿名');
-    sheet2Data.push([r.no, sampleName, r.sampleDate, '', r.sampleDate, 'S1-HIV02']);
+    const sampleName = currentMode === 'named' ? (r.name || '') : (r.consult || '');
+    const sampleDateW = minguoToWestern(r.sampleDate) || '';
+    s2.push([r.no, sampleName, sampleDateW, '', sampleDateW, 'S1-HIV02']);
   });
-  const sheet2 = XLSX.utils.aoa_to_sheet(sheet2Data);
-  XLSX.utils.book_append_sheet(wb, sheet2, '醫事檢驗檢體列表');
+  const ws2 = XLSX.utils.aoa_to_sheet(s2);
+  ws2['!cols'] = [{wch:17},{wch:12},{wch:11},{wch:11},{wch:11},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws2, '醫事檢驗檢體列表');
 
-  // 檔名：日期 + 送驗原因（若有填）+ 具/匿篩送驗
+  // ---- Sheet 3「檢驗對象查詢」（lookup table，給範本 VLOOKUP 用）----
+  const s3 = Object.entries(TARGET_FULL_LABEL).map(([k, v]) => [parseInt(k, 10), v]);
+  const ws3 = XLSX.utils.aoa_to_sheet(s3);
+  ws3['!cols'] = [{wch:9}, {wch:60}];
+  XLSX.utils.book_append_sheet(wb, ws3, '檢驗對象查詢');
+
+  // === Step 3: 下載 ===
   const dateStr = (hdr.sendDate || todayMinguo()).replace(/\//g, '');
   const reason = hdr.reason ? hdr.reason.replace(/[\\/:*?"<>|]/g, '') : '';
   const tail = (currentMode === 'named' ? '具篩' : '匿篩') + '送驗';
   const filename = dateStr + reason + tail + '.xlsx';
   XLSX.writeFile(wb, filename);
-
-  // 下載後自動上傳雲端（背景，不擋使用者）
-  syncRowsToCloud(rows, hdr).catch(e => console.warn('auto sync failed:', e));
 }
 
 async function syncRowsToCloud(rows, hdr) {
@@ -985,13 +1082,15 @@ async function syncRowsToCloud(rows, hdr) {
     });
     const d = await resp.json();
     if (d.ok) {
-      toast('✓ 已下載 XLSX + 雲端同步 ' + d.inserted + ' 筆');
+      const total = (d.inserted || 0) + (d.updated || 0);
+      toast('✓ 雲端已存 ' + total + ' 筆（新 ' + d.inserted + ' / 覆寫 ' + d.updated + '）');
       fetchMaxFromCloud();
+      return d;
     } else {
-      toast('⚠ 雲端同步失敗：' + (d.err || 'unknown'));
+      return { ok: false, err: d.err || 'unknown' };
     }
   } catch (e) {
-    toast('⚠ 雲端同步連線失敗');
+    return { ok: false, err: e.message || '連線失敗' };
   }
 }
 
