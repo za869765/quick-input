@@ -20,8 +20,10 @@ export async function onRequestGet({ env, request }) {
   if (prefix) { where.push('no LIKE ?'); binds.push(prefix + '%'); }
   if (mode) { where.push('mode = ?'); binds.push(mode); }
   if (q) {
-    where.push('(no LIKE ? OR name LIKE ? OR id_no LIKE ? OR consult LIKE ?)');
-    const like = '%' + q + '%';
+    /* v0.3.7：escape LIKE 萬用字元 % _ \，避免使用者輸 % 拿到全部資料 */
+    const escQ = String(q).replace(/[\\%_]/g, '\\$&');
+    where.push("(no LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\' OR id_no LIKE ? ESCAPE '\\' OR consult LIKE ? ESCAPE '\\')");
+    const like = '%' + escQ + '%';
     binds.push(like, like, like, like);
   }
   if (sampleFrom) { where.push('sample_date >= ?'); binds.push(sampleFrom); }
@@ -135,10 +137,30 @@ export async function onRequestPost({ request, env }) {
      VALUES (?,?,?,?)`
   );
 
-  let inserted = 0, updated = 0, snapshots = 0;
+  /* v0.3.7 H3：UPSERT 冪等比對 — 若 incoming 與 existing 11 個關鍵欄位內容相同
+     則 skip 整個寫入（不寫 history、不 UPDATE），避免網路 retry 時製造假 history snapshot */
+  const _same = (old, r) => {
+    return (old.mode || 'named') === (r.mode || 'named') &&
+           (old.name || null) === (r.name || null) &&
+           (old.consult || null) === (r.consult || null) &&
+           (old.birth || null) === (r.birth || null) &&
+           (old.id_no || null) === (r.id_no || null) &&
+           (old.sex || null) === (r.sex || null) &&
+           (old.target || null) === (r.target || null) &&
+           (old.sample_date || null) === (r.sample_date || null) &&
+           (old.reason || null) === (r.reason || null) &&
+           (old.unit || null) === (r.unit || null) &&
+           (old.send_date || null) === (r.send_date || null);
+  };
+  let inserted = 0, updated = 0, snapshots = 0, idempotentSkipped = 0;
   for (const r of rows) {
     const old = existingMap.get(r.no);
     if (old) {
+      if (_same(old, r)) {
+        /* 冪等 skip：incoming 與 existing 完全相同 → 不寫 history、不 UPDATE */
+        idempotentSkipped++;
+        continue;
+      }
       // 寫舊版本快照
       batchStmts.push(historyStmt.bind(
         old.id, old.no, JSON.stringify(old), 'upsert'
@@ -160,12 +182,14 @@ export async function onRequestPost({ request, env }) {
   }
 
   try {
-    await env.DB.batch(batchStmts);
+    /* v0.3.7：batchStmts 為空（全部 idempotent skip）時不需打 D1 */
+    if (batchStmts.length) await env.DB.batch(batchStmts);
     return json({
       ok: true,
       inserted,
       updated,
       snapshots,
+      idempotentSkipped,
       total: rows.length,
     });
   } catch (e) {

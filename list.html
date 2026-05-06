@@ -291,7 +291,7 @@
   </div>
 </div>
 
-<div class="ver">v0.3.6</div>
+<div class="ver">v0.3.7</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -470,13 +470,22 @@ function closeEdit() {
   $('editModal').classList.remove('show');
 }
 
-/* v0.3.6 M1：民國日期 padStart 正規化（避免 115/05/6 字串排序錯亂）
-   yyy/m/d → yyy/0m/0d；yyy/mm/dd 維持；西元 yyyy/m/d 也補 0 */
+/* v0.3.6/v0.3.7 民國日期 padStart 正規化
+   - yyy/m/d → yyy/0m/0d；yyy/mm/dd 維持原樣
+   - v0.3.7 增強：
+     * 拒絕 4 位西元年（避免 2026/05/06 誤入 D1，與民國 115/05/06 字串比較錯亂）
+     * 拒絕無效月份（>12）或無效日（>31）：回原值不正規化，由 server/UI 驗證 */
 function normalizeMinguoDate(s) {
   if (!s) return s;
   const m = String(s).trim().match(/^(\d{1,4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
   if (!m) return s;
-  return m[1] + '/' + String(m[2]).padStart(2,'0') + '/' + String(m[3]).padStart(2,'0');
+  const y = parseInt(m[1], 10);
+  const mo = parseInt(m[2], 10);
+  const d = parseInt(m[3], 10);
+  if (y >= 1911) return s;            // 4 位西元 → 不正規化（讓 UI 警示或維持原樣）
+  if (mo < 1 || mo > 12) return s;    // 月份越界
+  if (d < 1 || d > 31) return s;      // 日越界
+  return m[1] + '/' + String(mo).padStart(2,'0') + '/' + String(d).padStart(2,'0');
 }
 
 $('btnSaveEdit').addEventListener('click', async () => {
@@ -531,9 +540,12 @@ async function renderHistory(no, rows) {
     return;
   }
   /* v0.3.6 H2：先看現在 cases 裡是否有同 no 的記錄；若有 + 歷史中有 reason='delete'
-     表示「該編號被刪後又給新個案重用」，還原會覆蓋新個案資料，需要警示 */
+     表示「該編號被刪後又給新個案重用」，還原會覆蓋新個案資料，需要警示
+     v0.3.7：prefix 是 LIKE 模糊匹配（11505050000 會撈到 0001~0009），
+     必須再驗 cur.no === no 才算同筆 */
   const cur = await fetch('/api/cases?prefix=' + encodeURIComponent(no) + '&limit=1').then(r=>r.json()).catch(() => null);
-  const currentRow = (cur && cur.rows && cur.rows[0]) || null;
+  const candidate = (cur && cur.rows && cur.rows[0]) || null;
+  const currentRow = (candidate && candidate.no === no) ? candidate : null;
   const hasDeleted = rows.some(r => r.reason === 'delete');
   const isReused = !!currentRow && hasDeleted;
   const reuseWarn = isReused
