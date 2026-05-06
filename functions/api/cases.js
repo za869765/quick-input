@@ -66,6 +66,23 @@ export async function onRequestPost({ request, env }) {
   const rows = raw.map(normalize).filter(r => r.no);
   if (rows.length === 0) return json({ ok: false, err: 'no valid rows (missing no)' }, 400);
 
+  // Phase 0：idempotent 自動建 cases_history 表（讓使用者不必手動跑 migration SQL）
+  try {
+    await env.DB.batch([
+      env.DB.prepare(`CREATE TABLE IF NOT EXISTS cases_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id INTEGER, no TEXT NOT NULL,
+        snapshot_json TEXT NOT NULL,
+        replaced_at INTEGER DEFAULT (strftime('%s','now')),
+        reason TEXT
+      )`),
+      env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_history_no ON cases_history(no)`),
+      env.DB.prepare(`CREATE INDEX IF NOT EXISTS idx_history_replaced_at ON cases_history(replaced_at)`),
+    ]);
+  } catch (e) {
+    return json({ ok: false, err: 'history table init failed: ' + e.message }, 500);
+  }
+
   // Phase 1：批次查既有 row（每筆編號）
   const noList = rows.map(r => r.no);
   let existingMap = new Map();
