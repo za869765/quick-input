@@ -231,7 +231,7 @@
 </div>
 
 </div>
-<div class="ver">v0.3.2</div>
+<div class="ver">v0.3.3</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -875,8 +875,9 @@ document.querySelectorAll('#modeSwitch label').forEach(label => {
     rowSeq = 0;
     renderHead();
     updateTargetOptions();
-    for (let i = 0; i < 10; i++) {
-      // 第 1~10 列沿用原本該位置編號；如果原本不足 10 列才走自動分號
+    // v0.3.3：切換模式時保留原本列數（最少 1 列），不再固定 10 列
+    const keep = Math.max(1, oldNos.length);
+    for (let i = 0; i < keep; i++) {
       addRow(oldNos[i] ? { no: oldNos[i] } : undefined);
     }
     autoSave();
@@ -1069,7 +1070,7 @@ function toast(msg) {
 $('btnClear').addEventListener('click', () => {
   if (confirm('確定清空所有資料？流水號會保留繼續編號。')) {
     tbody.innerHTML = ''; rowSeq = 0;
-    for (let i = 0; i < 10; i++) addRow();
+    addRow(); // v0.3.3：預設 1 列，要更多用 Enter 自動長
     autoSave();
   }
 });
@@ -1221,8 +1222,8 @@ async function init() {
     reconcileSerialConflicts(cloudInfo.maxSerial);
   }
 
-  // 3. 補空列至 10 筆，此時用的是最新 nextSerial
-  while (tbody.children.length < 10) addRow();
+  // 3. 至少補一列（v0.3.3：預設 1 筆，要更多用 Enter 自動長）
+  if (tbody.children.length === 0) addRow();
   updateNoPreview();
 
   // 4. focus 第一格資料欄
