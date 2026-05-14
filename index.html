@@ -231,7 +231,7 @@
 </div>
 
 </div>
-<div class="ver">v0.3.7</div>
+<div class="ver">v0.3.8</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -511,21 +511,34 @@ function buildTargetOptionsHtml(opts, selected) {
   return opts.map(([v, l]) => '<option value="' + v + '"' + (v === selected ? ' selected' : '') + '>' + l + '</option>').join('');
 }
 
-// 依出生民國/西元年自動推算 target（具名）
+// 依出生年月日精確算年齡（含月日邊界）→ 自動推算 target（具名）
+// v0.3.8 L4：原版只算 year diff，生日當天前後會誤分類
 function targetFromBirth(birthStr) {
-  if (!birthStr) return '7'; // 無法識別 → 7
-  // 取年份（民國 2~3 位 或西元 4 位）
-  const m = String(birthStr).match(/^(\d{2,4})/);
-  if (!m) return '7';
-  let y = parseInt(m[1], 10);
-  // 4 位 → 西元
-  if (y >= 1900) y = y - 1911;
-  // 2~3 位 → 民國
-  const curY = (new Date().getFullYear()) - 1911;
-  const age = curY - y;
+  if (!birthStr) return '7';
+  const s = String(birthStr).trim();
+  // 期待格式：yyyy/MM/DD（smartDateWestern 已 normalize），容錯 - .
+  const m = s.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
+  let by, bm, bd;
+  if (m) {
+    by = parseInt(m[1], 10);
+    bm = parseInt(m[2], 10);
+    bd = parseInt(m[3], 10);
+  } else {
+    // fallback：只解出年份位（與舊版相容，月日當 1/1）
+    const m2 = s.match(/^(\d{2,4})/);
+    if (!m2) return '7';
+    by = parseInt(m2[1], 10);
+    if (by < 1900) by += 1911; // 民國 → 西元
+    bm = 1; bd = 1;
+  }
+  const today = new Date();
+  const ty = today.getFullYear();
+  const tm = today.getMonth() + 1;
+  const td = today.getDate();
+  let age = ty - by;
+  if (tm < bm || (tm === bm && td < bd)) age -= 1; // 還沒過今年生日
   if (isNaN(age) || age < 0) return '7';
-  if (age <= 35) return '7';
-  return '8'; // 36+ 一律 8
+  return age <= 35 ? '7' : '8';
 }
 
 // 切換模式時更新「抬頭」的檢驗對象代碼下拉
@@ -934,6 +947,12 @@ async function exportXlsx() {
     return;
   }
 
+  // v0.3.8 L5: 匯出前先做 health check，離線預警讓使用者知情選擇
+  const online = await checkHealthQuick();
+  if (!online) {
+    if (!confirm('⚠ 目前離線（雲端 health check 失敗）\n\n匯出將只用本地暫存資料，可能漏雲端最新筆。\n\n是否仍要繼續匯出？')) return;
+  }
+
   // === Step 1: 先把資料存進雲端 ===
   let saveErr = null;
   try {
@@ -1063,6 +1082,21 @@ async function exportXlsx() {
   XLSX.writeFile(wb, filename);
 }
 
+/* v0.3.8 L5：快速 health check（3 秒 timeout），離線時 export 預警用 */
+async function checkHealthQuick() {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 3000);
+    const r = await fetch('/api/_health', { signal: ctrl.signal, cache: 'no-store' });
+    clearTimeout(t);
+    if (!r.ok) return false;
+    const d = await r.json();
+    return !!d.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
 async function syncRowsToCloud(rows, hdr) {
   const payload = rows.map(r => ({
     no: r.no, mode: currentMode,
@@ -1082,6 +1116,10 @@ async function syncRowsToCloud(rows, hdr) {
     });
     const d = await resp.json();
     if (d.ok) {
+      /* v0.3.8 H1：若 server 因並發衝突重 allocate 了新 no，更新本地 DOM 與 rows */
+      if (Array.isArray(d.reallocations) && d.reallocations.length) {
+        applyReallocations(rows, d.reallocations);
+      }
       const total = (d.inserted || 0) + (d.updated || 0);
       toast('✓ 雲端已存 ' + total + ' 筆（新 ' + d.inserted + ' / 覆寫 ' + d.updated + '）');
       fetchMaxFromCloud();
@@ -1092,6 +1130,29 @@ async function syncRowsToCloud(rows, hdr) {
   } catch (e) {
     return { ok: false, err: e.message || '連線失敗' };
   }
+}
+
+/* v0.3.8 H1：把 server 重 allocate 的新 no 寫回 DOM 對應列，並 toast 提示 */
+function applyReallocations(rows, reallocations) {
+  const map = new Map(reallocations.map(x => [x.originalNo, x.newNo]));
+  rows.forEach(r => {
+    const newNo = map.get(r.no);
+    if (!newNo) return;
+    r.no = newNo;
+  });
+  Array.from(tbody.children).forEach(tr => {
+    const noEl = tr.querySelector('.r-no');
+    if (!noEl) return;
+    const newNo = map.get(noEl.value.trim());
+    if (newNo) {
+      noEl.value = newNo;
+      noEl.classList.remove('flash-converted');
+      void noEl.offsetWidth;
+      noEl.classList.add('flash-converted');
+    }
+  });
+  const pairs = reallocations.map(x => x.originalNo + '→' + x.newNo).join('、');
+  toast('⚠ ' + reallocations.length + ' 筆編號被佔用，已自動改為新號（' + pairs + '）', 6000);
 }
 
 // ================================================================
@@ -1150,7 +1211,7 @@ document.addEventListener('change', () => { autoSave(); updateCounter(); });
 // Toast 提示
 // ================================================================
 let toastTimer;
-function toast(msg) {
+function toast(msg, duration) {
   let el = document.querySelector('.toast');
   if (!el) {
     el = document.createElement('div');
@@ -1160,7 +1221,7 @@ function toast(msg) {
   el.textContent = msg;
   el.style.display = 'block';
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.style.display = 'none', 1800);
+  toastTimer = setTimeout(() => el.style.display = 'none', duration || 1800);
 }
 
 // ================================================================
@@ -1199,7 +1260,6 @@ async function fetchMaxFromCloud() {
   }
   try {
     const r = await fetch('/api/cases/max-no?prefix=' + encodeURIComponent(prefix));
-    console.log('[fetchMaxFromCloud] status', r.status);
     if (r.status === 401) {
       console.warn('[fetchMaxFromCloud] unauthorized — 請重新登入');
       return null;
@@ -1209,14 +1269,12 @@ async function fetchMaxFromCloud() {
       return null;
     }
     const d = await r.json();
-    console.log('[fetchMaxFromCloud] resp', d);
     if (!d.ok || typeof d.nextSerial !== 'number') {
       console.warn('[fetchMaxFromCloud] bad payload', d);
       return null;
     }
     const localNext = nextSerial();
     const merged = Math.max(d.nextSerial, localNext);
-    console.log('[fetchMaxFromCloud] cloud=' + d.nextSerial + ' local=' + localNext + ' → setNext=' + merged);
     setNextSerial(merged);
     renumberEmptyRows();
     if (d.nextSerial > localNext) {
@@ -1257,7 +1315,6 @@ function reconcileSerialConflicts(cloudMaxSerial) {
   });
   setNextSerial(serial);
   if (bumped > 0) {
-    console.log('[reconcile] 重編 ' + bumped + ' 筆衝突列至 ' + (cloudMaxSerial + 1) + '+');
     toast('⚠ 已重編 ' + bumped + ' 筆舊草稿編號（避免覆蓋雲端資料）');
   }
   return bumped;
