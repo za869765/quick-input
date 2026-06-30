@@ -165,6 +165,22 @@
     animation: toastIn 0.2s; opacity: 0.95;
   }
   @keyframes toastIn { from { transform: translateY(-20px); opacity: 0 } to { transform: none; opacity: 0.95 } }
+
+  /* v0.3.9：匯入預覽 modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    display: flex; align-items: center; justify-content: center; z-index: 200; padding: 16px;
+  }
+  .modal {
+    background: #fff; border-radius: 12px; max-width: 780px; width: 100%;
+    max-height: 88vh; overflow: auto; padding: 20px 24px;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.3);
+  }
+  .modal h3 { margin: 0 0 12px; color: #1a73e8; font-size: 18px; }
+  .modal table { width: auto; }
+  .modal thead th { position: static; background: #f1f3f5; border: 1px solid #e9ecef; }
+  .modal .warn { color: #c62828; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
 </style>
 </head>
 <body>
@@ -211,6 +227,8 @@
 
   <div class="actions">
     <button class="btn btn-danger" id="btnClear">清空</button>
+    <button class="btn btn-secondary" id="btnImport">📥 上傳 Excel/CSV 匯入</button>
+    <input type="file" id="fileImport" accept=".xlsx,.xls,.csv" style="display:none">
     <span class="hint" style="margin:0;align-self:center">資料自動暫存（每次輸入即存、進入自動載入）</span>
   </div>
   <div style="overflow-x:auto;">
@@ -227,11 +245,12 @@
   <h2 style="cursor:default">產出</h2>
   <div class="actions">
     <button class="btn btn-primary" id="btnExport">⬇ 下載送驗單 XLSX</button>
+    <button class="btn btn-primary" id="btnWriteCloud" style="background:#2e7d32">✓ 確認寫入雲端</button>
   </div>
 </div>
 
 </div>
-<div class="ver">v0.3.8</div>
+<div class="ver">v0.3.9</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -1235,6 +1254,297 @@ $('btnClear').addEventListener('click', () => {
   }
 });
 $('btnExport').addEventListener('click', exportXlsx);
+
+// ================================================================
+// v0.3.9：上傳 Excel/CSV 批次匯入
+//   流程：選檔 → 解析(表頭關鍵字對應) → 預覽確認 → 清空既有並填表
+//        → 人工檢視/修正 → 按「確認寫入雲端」才寫 D1
+// ================================================================
+
+// 表頭關鍵字 → 內部欄位 key（specific 先判，避免「對象代碼/送驗編號」誤判成姓名/代碼）
+function matchImportField(h) {
+  const s = String(h == null ? '' : h).replace(/\s+/g, '').trim();
+  if (!s) return null;
+  if (/諮詢|匿名代碼/.test(s)) return 'consult';
+  if (/送驗編號/.test(s)) return 'no';
+  if (/姓名/.test(s) && !/單位/.test(s)) return 'name';
+  if (/^name$/i.test(s)) return 'name';
+  if (/出生|生日|birth/i.test(s)) return 'birth';
+  if (/身分證|身份證|^id$|id_?no/i.test(s)) return 'id';
+  if (/性別|sex|gender/i.test(s)) return 'sex';
+  if (/檢驗對象|對象/.test(s)) return 'target';
+  if (/採檢|採樣|sample_?date/i.test(s)) return 'sampleDate';
+  return null;
+}
+
+// Excel 真實日期 cell（Date 物件）→ yyyy/MM/DD；其餘轉字串
+function fmtImportCell(v) {
+  if (v instanceof Date && !isNaN(v)) {
+    return v.getFullYear() + '/' +
+      String(v.getMonth() + 1).padStart(2, '0') + '/' +
+      String(v.getDate()).padStart(2, '0');
+  }
+  return String(v == null ? '' : v).trim();
+}
+
+function normImportSex(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return '';
+  if (/女|^2|F/i.test(s)) return '2';
+  if (/男|^1|M/i.test(s)) return '1';
+  return '';
+}
+
+function escHtml(v) {
+  return String(v == null ? '' : v).replace(/[&<>"]/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]
+  ));
+}
+
+function colLetter(i) {
+  let s = ''; i = i + 1;
+  while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); }
+  return s;
+}
+
+const IMPORT_FIELD_LABEL = {
+  name: '姓名', birth: '出生年月日', id: '身分證字號', sex: '性別',
+  target: '檢驗對象', sampleDate: '採檢日期', consult: '諮詢代碼'
+};
+
+// 讀檔 → 解析 → {mode, mapping, rows, total, warnings} 或 {error}
+async function parseImportFile(file) {
+  const name = (file.name || '').toLowerCase();
+  const buf = await file.arrayBuffer();
+  let wb;
+  if (name.endsWith('.csv')) {
+    // CSV：先試 UTF-8，亂碼則退 Big5（台灣 Excel 匯出 CSV 常見 Big5）
+    let text = new TextDecoder('utf-8', { fatal: false }).decode(buf);
+    if (text.includes('�')) {
+      try { text = new TextDecoder('big5').decode(buf); } catch (_) {}
+    }
+    wb = XLSX.read(text, { type: 'string', cellDates: true });
+  } else {
+    wb = XLSX.read(buf, { type: 'array', cellDates: true });
+  }
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if (!ws) return { error: '檔案沒有可讀取的工作表' };
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+  if (!aoa.length) return { error: '檔案是空的' };
+
+  // 找表頭列：前 10 列中命中欄位關鍵字最多者
+  let headerRow = -1, bestHits = 0, bestMap = null;
+  const scan = Math.min(10, aoa.length);
+  for (let i = 0; i < scan; i++) {
+    const row = aoa[i] || [];
+    const map = {};
+    let hits = 0;
+    row.forEach((cell, ci) => {
+      const f = matchImportField(cell);
+      if (f && map[f] == null) { map[f] = ci; hits++; }
+    });
+    if (hits > bestHits) { bestHits = hits; headerRow = i; bestMap = map; }
+  }
+  if (headerRow < 0 || bestHits < 1 || !bestMap) {
+    return { error: '無法辨識欄位標題。請確認檔案有一列標題含：姓名 / 出生年月日 / 身分證 / 性別 / 採檢日期（或匿名的「諮詢代碼」）。' };
+  }
+
+  // 判斷模式
+  let mode;
+  if (bestMap.consult != null && bestMap.name == null && bestMap.id == null) mode = 'anon';
+  else if (bestMap.name != null || bestMap.id != null || bestMap.birth != null) mode = 'named';
+  else if (bestMap.consult != null) mode = 'anon';
+  else mode = 'named';
+
+  const get = (row, key) => bestMap[key] == null ? '' : fmtImportCell(row[bestMap[key]]);
+
+  const rows = [];
+  for (let i = headerRow + 1; i < aoa.length; i++) {
+    const row = aoa[i] || [];
+    if (mode === 'named') {
+      const nm = get(row, 'name');
+      const idRaw = get(row, 'id').toUpperCase();
+      const birthRaw = get(row, 'birth');
+      if (!nm && !idRaw && !birthRaw) continue; // 空列
+      const birth = birthRaw ? smartDateWestern(birthRaw) : '';
+      const sampleRaw = get(row, 'sampleDate');
+      const sampleDate = sampleRaw ? smartDate(sampleRaw) : '';
+      const sex = normImportSex(get(row, 'sex')) || (idRaw ? genderFromId(idRaw) : '');
+      const tgt = String(get(row, 'target')).replace(/\D/g, '');
+      const target = tgt || (birth ? targetFromBirth(birth) : '');
+      rows.push({ name: nm, id: idRaw, birth, sex, target, sampleDate });
+    } else {
+      const consult = get(row, 'consult');
+      if (!consult) continue;
+      const sampleRaw = get(row, 'sampleDate');
+      const sampleDate = sampleRaw ? smartDate(sampleRaw) : '';
+      rows.push({ consult, sampleDate });
+    }
+  }
+  if (!rows.length) return { error: '表頭以下找不到任何資料列。' };
+
+  const warnings = [];
+  if (mode === 'named') {
+    const badId = rows.filter(r => r.id && checkId(r.id) === false).length;
+    const noName = rows.filter(r => !r.name).length;
+    if (badId) warnings.push('⚠ ' + badId + ' 筆身分證驗算不符（仍會匯入，紅字標示，請於清單檢視）');
+    if (noName) warnings.push('⚠ ' + noName + ' 筆缺姓名');
+  } else {
+    const noConsult = rows.filter(r => !r.consult).length;
+    if (noConsult) warnings.push('⚠ ' + noConsult + ' 筆缺諮詢代碼');
+  }
+  return { mode, mapping: bestMap, rows, total: rows.length, warnings };
+}
+
+function showImportPreview(parsed, fileName) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  const close = () => overlay.remove();
+
+  if (parsed.error) {
+    overlay.innerHTML =
+      '<div class="modal"><h3>匯入失敗</h3><p class="warn">' + escHtml(parsed.error) + '</p>' +
+      '<div class="modal-actions"><button class="btn btn-secondary" id="mClose">關閉</button></div></div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#mClose').addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    return;
+  }
+
+  const cols = (parsed.mode === 'named')
+    ? ['name', 'birth', 'id', 'sex', 'target', 'sampleDate']
+    : ['consult', 'sampleDate'];
+
+  const mapHtml = cols.map(k => {
+    const ci = parsed.mapping[k];
+    const src = (ci == null)
+      ? '<span style="color:#adb5bd">（無，留空／自動帶）</span>'
+      : '第 ' + colLetter(ci) + ' 欄';
+    return '<tr><td style="padding:3px 10px;font-weight:600">' + IMPORT_FIELD_LABEL[k] +
+      '</td><td style="padding:3px 10px">← ' + src + '</td></tr>';
+  }).join('');
+
+  const headCells = cols.map(k => '<th style="padding:4px 8px">' + IMPORT_FIELD_LABEL[k] + '</th>').join('');
+  const bodyRows = parsed.rows.slice(0, 8).map(r => {
+    const tds = cols.map(k => {
+      let v = r[k] || '';
+      if (k === 'sex') v = v === '1' ? '1男' : (v === '2' ? '2女' : '');
+      const danger = (k === 'id' && r.id && checkId(r.id) === false);
+      const st = ' style="padding:4px 8px;border-top:1px solid #eee' + (danger ? ';color:#c62828;font-weight:600' : '') + '"';
+      return '<td' + st + '>' + escHtml(v) + '</td>';
+    }).join('');
+    return '<tr>' + tds + '</tr>';
+  }).join('');
+  const moreNote = parsed.rows.length > 8
+    ? '<p style="color:#6c757d;font-size:12px;margin:6px 0 0">…等共 ' + parsed.rows.length + ' 筆</p>' : '';
+
+  const warnHtml = parsed.warnings.length
+    ? '<div style="margin:10px 0;padding:8px 12px;background:#fff3e0;border-radius:6px;font-size:13px">' +
+      parsed.warnings.map(w => '<div class="warn">' + escHtml(w) + '</div>').join('') + '</div>'
+    : '';
+
+  const modeLabel = parsed.mode === 'named' ? '具名送驗' : '匿名送驗';
+  const modeNote = (parsed.mode !== currentMode) ? '（將自動切換到此模式）' : '';
+
+  overlay.innerHTML =
+    '<div class="modal">' +
+      '<h3>📥 匯入預覽</h3>' +
+      '<p style="margin:0 0 10px;font-size:13px;color:#495057">來源：<b>' + escHtml(fileName) +
+        '</b>　偵測模式：<b>' + modeLabel + '</b> ' + modeNote + '　共 <b>' + parsed.total + '</b> 筆</p>' +
+      '<div style="font-size:13px;margin-bottom:6px;font-weight:600;color:#1a73e8">欄位對應</div>' +
+      '<table style="font-size:13px;margin-bottom:8px"><tbody>' + mapHtml + '</tbody></table>' +
+      warnHtml +
+      '<div style="font-size:13px;margin-bottom:6px;font-weight:600;color:#1a73e8">資料預覽（前 8 筆）</div>' +
+      '<div style="overflow-x:auto"><table style="font-size:13px;border-collapse:collapse">' +
+        '<thead><tr>' + headCells + '</tr></thead><tbody>' + bodyRows + '</tbody></table></div>' +
+      moreNote +
+      '<p style="color:#c62828;font-size:12px;margin:10px 0 0">⚠ 確認匯入會「清空目前清單」並以匯入資料取代（送驗編號自動接續、暫不寫雲端）；檢視無誤後再按〔✓ 確認寫入雲端〕。</p>' +
+      '<div class="modal-actions">' +
+        '<button class="btn btn-secondary" id="mCancel">取消</button>' +
+        '<button class="btn btn-primary" id="mOk">確認匯入並填入清單（' + parsed.total + ' 筆）</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  overlay.querySelector('#mCancel').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelector('#mOk').addEventListener('click', async () => {
+    close();
+    await commitImport(parsed);
+  });
+}
+
+function applyModeUI(mode) {
+  currentMode = mode;
+  document.querySelectorAll('#modeSwitch label').forEach(x => {
+    const on = x.dataset.mode === mode;
+    x.classList.toggle('active', on);
+    const radio = x.querySelector('input');
+    if (radio) radio.checked = on;
+  });
+  updateTargetOptions();
+}
+
+async function commitImport(parsed) {
+  applyModeUI(parsed.mode);
+  tbody.innerHTML = '';
+  rowSeq = 0;
+  renderHead();
+  // 清空後本地無序號衝突 → 直接以雲端真實最大號為起點，避免跳號（不跳號鐵律）
+  try {
+    const prefix = $('hdr_no_prefix').value.trim();
+    if (prefix) {
+      const r = await fetch('/api/cases/max-no?prefix=' + encodeURIComponent(prefix));
+      if (r.ok) {
+        const d = await r.json();
+        if (d.ok && typeof d.nextSerial === 'number') setNextSerial(d.nextSerial);
+      }
+    }
+  } catch (_) {}
+  parsed.rows.forEach(r => addRow(r));
+  if (tbody.children.length === 0) addRow();
+  updateNoPreview();
+  autoSave();
+  updateCounter();
+  toast('✓ 已匯入 ' + parsed.total + ' 筆，請檢視清單無誤後按〔✓ 確認寫入雲端〕', 4000);
+}
+
+// 觸發匯入
+$('btnImport').addEventListener('click', () => $('fileImport').click());
+$('fileImport').addEventListener('change', async (ev) => {
+  const f = ev.target.files && ev.target.files[0];
+  ev.target.value = ''; // 允許同一檔再次選取
+  if (!f) return;
+  if (hasAnyData() && !confirm('匯入會「清空目前清單」的資料，確定要繼續？')) return;
+  try {
+    toast('解析中…');
+    const parsed = await parseImportFile(f);
+    showImportPreview(parsed, f.name);
+  } catch (e) {
+    showImportPreview({ error: '解析失敗：' + (e.message || e) }, f.name);
+  }
+});
+
+// 確認寫入雲端（人工檢視後才寫 D1）
+$('btnWriteCloud').addEventListener('click', confirmWriteCloud);
+async function confirmWriteCloud() {
+  const hdr = getHeader();
+  let rows = collectRows().filter(r => r.name || r.id || r.consult);
+  rows.forEach((r, i) => r.seq = i + 1);
+  if (rows.length === 0) {
+    alert('清單沒有可寫入的資料（姓名／身分證／諮詢代碼至少一項）');
+    return;
+  }
+  const online = await checkHealthQuick();
+  if (!online && !confirm('⚠ 目前離線（雲端 health check 失敗），仍要嘗試寫入雲端？')) return;
+  if (!confirm('確定將目前清單 ' + rows.length + ' 筆寫入雲端？\n（同編號會覆蓋更新，舊值自動存歷史可還原）')) return;
+  try {
+    const r = await syncRowsToCloud(rows, hdr);
+    if (!r || !r.ok) alert('雲端寫入失敗：' + ((r && r.err) || 'unknown'));
+    // 成功時 syncRowsToCloud 已 toast 並更新流水號
+  } catch (e) {
+    alert('雲端寫入失敗：' + (e.message || e));
+  }
+}
 
 // 起始：年度區碼預設「當前民國年 + 0505」
 function defaultPrefix() {
