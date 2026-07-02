@@ -103,16 +103,21 @@ export async function onRequestPost({ request, env }) {
   }
 
   // Phase 1：批次查既有 row（每筆編號）
+  // v0.3.12：IN(...) 分塊 ≤90 — D1 限制每查詢最多 100 個綁定變數，
+  // 一次送 335 筆會爆 too many SQL variables
   const noList = rows.map(r => r.no);
   let existingMap = new Map();
   try {
-    const placeholders = noList.map(() => '?').join(',');
-    const sel = await env.DB
-      .prepare(`SELECT * FROM cases WHERE no IN (${placeholders})`)
-      .bind(...noList)
-      .all();
-    for (const old of (sel.results || [])) {
-      existingMap.set(old.no, old);
+    for (let i = 0; i < noList.length; i += 90) {
+      const part = noList.slice(i, i + 90);
+      const placeholders = part.map(() => '?').join(',');
+      const sel = await env.DB
+        .prepare(`SELECT * FROM cases WHERE no IN (${placeholders})`)
+        .bind(...part)
+        .all();
+      for (const old of (sel.results || [])) {
+        existingMap.set(old.no, old);
+      }
     }
   } catch (e) {
     return json({ ok: false, err: 'lookup failed: ' + e.message }, 500);
@@ -184,7 +189,9 @@ export async function onRequestPost({ request, env }) {
     }
     let newSerial = maxSerial + 1;
     let newNo = prefix + String(newSerial).padStart(4, '0');
-    while (newAllocated.has(newNo) || existingMap.has(newNo)) {
+    /* v0.3.12：也要跳過本次 request 自己帶進來的編號（seenNo），
+       否則重配的新號會撞到同批後面的列 → 同 batch 兩個 INSERT 同號 → UNIQUE 爆掉整批 rollback */
+    while (newAllocated.has(newNo) || existingMap.has(newNo) || seenNo.has(newNo)) {
       newSerial++;
       newNo = prefix + String(newSerial).padStart(4, '0');
     }

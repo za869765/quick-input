@@ -244,13 +244,12 @@
 <div class="panel">
   <h2 style="cursor:default">產出</h2>
   <div class="actions">
-    <button class="btn btn-primary" id="btnExport">⬇ 下載送驗單 XLSX</button>
     <button class="btn btn-primary" id="btnWriteCloud" style="background:#2e7d32">✓ 確認寫入雲端</button>
   </div>
 </div>
 
 </div>
-<div class="ver">v0.3.11</div>
+<div class="ver">v0.3.12</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -282,19 +281,6 @@ function westernYesterday() {
   return d.getFullYear() + '/' +
     String(d.getMonth() + 1).padStart(2, '0') + '/' +
     String(d.getDate()).padStart(2, '0');
-}
-
-// 西元年/民國年互轉 helpers
-function westernToMinguo(d) {
-  if (!d) return '';
-  const m = String(d).match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
-  if (m) {
-    const y = parseInt(m[1], 10);
-    if (y >= 1912 && y <= 2099) {
-      return (y - 1911) + '/' + m[2].padStart(2,'0') + '/' + m[3].padStart(2,'0');
-    }
-  }
-  return d;
 }
 
 // 西元日期模式（出生欄）— 一律輸出 yyyy/MM/DD
@@ -932,181 +918,7 @@ function rebuildTable() {
   if (oldRows.length === 0) addRow();
 }
 
-// ================================================================
-// XLSX 產出（v0.3.5：先存雲端再下載；格式對齊正版送驗單範本）
-// ================================================================
-
-// 檢驗對象代碼 → 完整描述（與正版範本「檢驗對象查詢」分頁一致）
-const TARGET_FULL_LABEL = {
-  '1':'警方查獲-黃單(毒癮、性交易服務者及其相對人)',
-  '2':'警方查獲-毒危講習',
-  '3':'藥癮者篩檢其他專案-地檢署',
-  '4':'八大行業、性工作者',
-  '5':'衛生局自行追蹤-梅毒舊案、梅毒通報(不驗RPR)、淋病通報',
-  '6':'局端-受血者(不驗RPR)',
-  '7':'全民-35歲以下(具名)',
-  '8':'全民-36~55歲(含)(具名)',
-  '9':'全民-HIV接觸者',
-  '10':'全民-TB通報共管個案',
-  '11':'匿名篩檢-外展',
-  '12':'匿名篩檢-非外展(社區)',
-  '13':'其他'
-};
-
-// 民國日期 → 西元日期 e.g. '115/05/06' → '2026/5/6'
-function minguoToWestern(s) {
-  if (!s) return '';
-  const m = String(s).trim().match(/^(\d{1,3})\/(\d{1,2})\/(\d{1,2})$/);
-  if (!m) return s;
-  return (parseInt(m[1], 10) + 1911) + '/' + parseInt(m[2], 10) + '/' + parseInt(m[3], 10);
-}
-
-async function exportXlsx() {
-  const hdr = getHeader();
-  let rows = collectRows();
-  rows = rows.filter(r => r.name || r.id || r.consult);
-  rows.forEach((r, i) => r.seq = i + 1);
-  if (rows.length === 0) {
-    alert('請先輸入至少一筆個案資料（姓名/身分證/諮詢代碼任一）');
-    return;
-  }
-
-  // v0.3.8 L5: 匯出前先做 health check，離線預警讓使用者知情選擇
-  const online = await checkHealthQuick();
-  if (!online) {
-    if (!confirm('⚠ 目前離線（雲端 health check 失敗）\n\n匯出將只用本地暫存資料，可能漏雲端最新筆。\n\n是否仍要繼續匯出？')) return;
-  }
-
-  // === Step 1: 先把資料存進雲端 ===
-  let saveErr = null;
-  try {
-    const r = await syncRowsToCloud(rows, hdr);
-    if (!r || !r.ok) saveErr = (r && r.err) || 'unknown';
-  } catch (e) {
-    saveErr = e.message;
-  }
-  if (saveErr) {
-    if (!confirm('⚠ 雲端儲存失敗：' + saveErr + '\n\n是否仍要下載 XLSX？\n（取消可重試/檢查網路；確定下載仍可手動再上傳）')) return;
-  }
-
-  // === Step 2: 組 workbook（3 個分頁，對齊正版範本）===
-  const wb = XLSX.utils.book_new();
-  const yearROC = new Date().getFullYear() - 1911;
-  const tgtCode = String(rows[0]?.target || hdr.target || '');
-
-  // ---- Sheet 1「送驗單」----
-  const ROWS_DATA = rows.length;
-  const s1 = Array.from({ length: 5 + ROWS_DATA }, () => Array(16).fill(''));
-  // 第 1 列：標題（A1:P1 合併）
-  s1[0][0] = yearROC + '年度臺南市政府衛生局性病檢驗送驗單';
-  // 第 2 列：抬頭（A2:H2 / I2:L2 / M2:P2 三段合併）
-  s1[1][0] = '單位名稱：' + (hdr.unit || '');
-  s1[1][8] = '申請單編號：'; // 留空待手填
-  s1[1][12] = '送驗日期:' + (hdr.sendDate || '');
-  // 第 3 列：欄位主標
-  s1[2][0]  = '號次';
-  s1[2][1]  = '送驗編號';
-  s1[2][2]  = '姓名';
-  s1[2][3]  = '出生\n年月日';
-  s1[2][4]  = '性別';
-  s1[2][6]  = '婚姻';
-  s1[2][8]  = '採檢   日期';
-  s1[2][9]  = '連絡電話';
-  s1[2][10] = '身份證字號';
-  s1[2][11] = '檢驗項目(結果)';
-  s1[2][14] = '檢驗\n對象';
-  s1[2][15] = '備註';
-  // 第 4 列：副標
-  s1[3][11] = '梅毒';
-  s1[3][12] = '愛滋';
-  // 第 5 列：細項
-  s1[4][4]  = '1.男\n2.女';
-  s1[4][6]  = '已';
-  s1[4][7]  = '未';
-  s1[4][11] = '梅毒血清抗體檢驗\n快速血漿反應素(RPR)';
-  s1[4][12] = '化學冷光法\n(Combo Ab+Ag)';
-  s1[4][13] = '免疫層析法';
-  // 資料列（第 6 列起）
-  rows.forEach((r, idx) => {
-    const row = s1[5 + idx];
-    row[0] = r.seq;
-    row[1] = r.no;
-    row[2] = currentMode === 'named' ? (r.name || '') : (r.consult || '');
-    if (currentMode === 'named') {
-      row[3] = westernToMinguo(r.birth) || ''; // 出生民國 yy/mm/dd
-      row[4] = r.sex === '1' ? '1男' : (r.sex === '2' ? '2女' : '');
-      row[10] = r.id || '';
-    }
-    row[8]  = minguoToWestern(r.sampleDate) || ''; // 採檢日期西元
-    row[12] = 'V'; // 愛滋 化學冷光法 預設打勾
-    row[14] = r.target || hdr.target || '';
-  });
-
-  const ws1 = XLSX.utils.aoa_to_sheet(s1);
-  ws1['!merges'] = [
-    { s:{r:0,c:0},  e:{r:0,c:15} }, // A1:P1
-    { s:{r:1,c:0},  e:{r:1,c:7}  }, // A2:H2
-    { s:{r:1,c:8},  e:{r:1,c:11} }, // I2:L2
-    { s:{r:1,c:12}, e:{r:1,c:15} }, // M2:P2
-    { s:{r:2,c:0},  e:{r:4,c:0}  }, // A3:A5 號次
-    { s:{r:2,c:1},  e:{r:4,c:1}  }, // B3:B5 送驗編號
-    { s:{r:2,c:2},  e:{r:4,c:2}  }, // C3:C5 姓名
-    { s:{r:2,c:3},  e:{r:4,c:3}  }, // D3:D5 出生
-    { s:{r:2,c:4},  e:{r:3,c:5}  }, // E3:F4 性別
-    { s:{r:4,c:4},  e:{r:4,c:5}  }, // E5:F5 1男2女
-    { s:{r:2,c:6},  e:{r:3,c:7}  }, // G3:H4 婚姻
-    { s:{r:2,c:8},  e:{r:4,c:8}  }, // I3:I5 採檢日期
-    { s:{r:2,c:9},  e:{r:4,c:9}  }, // J3:J5 連絡電話
-    { s:{r:2,c:10}, e:{r:4,c:10} }, // K3:K5 身份證
-    { s:{r:2,c:11}, e:{r:2,c:13} }, // L3:N3 檢驗項目(結果)
-    { s:{r:3,c:12}, e:{r:3,c:13} }, // M4:N4 愛滋
-    { s:{r:2,c:14}, e:{r:4,c:14} }, // O3:O5 檢驗對象
-    { s:{r:2,c:15}, e:{r:4,c:15} }, // P3:P5 備註
-  ];
-  // 每筆資料列 E:F 合併（性別欄佔兩格寬）
-  rows.forEach((_, idx) => {
-    ws1['!merges'].push({ s:{r:5+idx,c:4}, e:{r:5+idx,c:5} });
-  });
-  ws1['!cols'] = [
-    {wch:5},{wch:17},{wch:11},{wch:12},{wch:4},{wch:4},
-    {wch:4},{wch:4},{wch:13},{wch:14},{wch:17},{wch:18},
-    {wch:13},{wch:10},{wch:8},{wch:12}
-  ];
-  XLSX.utils.book_append_sheet(wb, ws1, '送驗單');
-
-  // ---- Sheet 2「醫事檢驗檢體列表」----
-  // 送驗原因規則：M 欄(愛滋) 必有 V → 「愛滋篩檢」；若 L 欄(梅毒)也勾 V 才會 + 梅毒
-  const s2 = [
-    ['申請單位：', hdr.unit || ''],
-    ['採樣單位：', hdr.unit || ''],
-    ['送驗原因：', '愛滋篩檢'], // 預設只勾愛滋；勾了梅毒可改 '梅毒檢驗與愛滋篩檢'
-    ['備註：', TARGET_FULL_LABEL[tgtCode] || tgtCode || ''],
-    ['樣品編號', '樣品名稱', '製造日期', '有效日期', '採樣日期', '檢驗成分編號列表']
-  ];
-  rows.forEach(r => {
-    const sampleName = currentMode === 'named' ? (r.name || '') : (r.consult || '');
-    const sampleDateW = minguoToWestern(r.sampleDate) || '';
-    s2.push([r.no, sampleName, sampleDateW, '', sampleDateW, 'S1-HIV02']);
-  });
-  const ws2 = XLSX.utils.aoa_to_sheet(s2);
-  ws2['!cols'] = [{wch:17},{wch:12},{wch:11},{wch:11},{wch:11},{wch:14}];
-  XLSX.utils.book_append_sheet(wb, ws2, '醫事檢驗檢體列表');
-
-  // ---- Sheet 3「檢驗對象查詢」（lookup table，給範本 VLOOKUP 用）----
-  const s3 = Object.entries(TARGET_FULL_LABEL).map(([k, v]) => [parseInt(k, 10), v]);
-  const ws3 = XLSX.utils.aoa_to_sheet(s3);
-  ws3['!cols'] = [{wch:9}, {wch:60}];
-  XLSX.utils.book_append_sheet(wb, ws3, '檢驗對象查詢');
-
-  // === Step 3: 下載 ===
-  const dateStr = (hdr.sendDate || todayMinguo()).replace(/\//g, '');
-  const reason = hdr.reason ? hdr.reason.replace(/[\\/:*?"<>|]/g, '') : '';
-  const tail = (currentMode === 'named' ? '具篩' : '匿篩') + '送驗';
-  const filename = dateStr + reason + tail + '.xlsx';
-  XLSX.writeFile(wb, filename);
-}
-
-/* v0.3.8 L5：快速 health check（3 秒 timeout），離線時 export 預警用 */
+/* v0.3.8 L5：快速 health check（3 秒 timeout），寫入雲端前離線預警用 */
 async function checkHealthQuick() {
   try {
     const ctrl = new AbortController();
@@ -1132,25 +944,41 @@ async function syncRowsToCloud(rows, hdr) {
     unit: hdr.unit || null,
     sendDate: hdr.sendDate || null
   }));
+  /* v0.3.12：分批 100 筆 POST — 一次全送時 server 的 IN(...) 查詢會爆
+     D1「每查詢最多 100 個綁定變數」上限（335 筆實測 too many SQL variables）。
+     UPSERT 冪等，中途失敗重送已寫入的筆會自動 skip。 */
+  const seenNo = new Set(), dupNos = new Set();
+  payload.forEach(p => { if (seenNo.has(p.no)) dupNos.add(p.no); seenNo.add(p.no); });
+  if (dupNos.size) {
+    return { ok: false, err: '清單有重複送驗編號：' + [...dupNos].join(', ') + '（請先修正再寫入）' };
+  }
+  const CHUNK = 100;
+  let inserted = 0, updated = 0;
+  const reallocations = [];
   try {
-    const resp = await fetch('/api/cases', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const d = await resp.json();
-    if (d.ok) {
-      /* v0.3.8 H1：若 server 因並發衝突重 allocate 了新 no，更新本地 DOM 與 rows */
+    for (let i = 0; i < payload.length; i += CHUNK) {
+      const resp = await fetch('/api/cases', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload.slice(i, i + CHUNK))
+      });
+      const d = await resp.json();
+      if (!d.ok) {
+        const doneNote = i > 0 ? '（前 ' + i + ' 筆已寫入，重按重送即可，相同資料會自動略過）' : '';
+        return { ok: false, err: (d.err || 'unknown') + doneNote };
+      }
+      inserted += d.inserted || 0;
+      updated += d.updated || 0;
+      /* v0.3.8 H1：server 因並發衝突重 allocate 新 no →「每批成功後立刻」寫回 DOM 與 rows，
+         否則後面批次失敗時本地仍是舊號，重送會讓同一人被再插一份新號 */
       if (Array.isArray(d.reallocations) && d.reallocations.length) {
         applyReallocations(rows, d.reallocations);
+        reallocations.push(...d.reallocations);
       }
-      const total = (d.inserted || 0) + (d.updated || 0);
-      toast('✓ 雲端已存 ' + total + ' 筆（新 ' + d.inserted + ' / 覆寫 ' + d.updated + '）');
-      fetchMaxFromCloud();
-      return d;
-    } else {
-      return { ok: false, err: d.err || 'unknown' };
     }
+    toast('✓ 雲端已存 ' + (inserted + updated) + ' 筆（新 ' + inserted + ' / 覆寫 ' + updated + '）');
+    fetchMaxFromCloud();
+    return { ok: true, inserted, updated, reallocations };
   } catch (e) {
     return { ok: false, err: e.message || '連線失敗' };
   }
@@ -1258,7 +1086,6 @@ $('btnClear').addEventListener('click', () => {
     autoSave();
   }
 });
-$('btnExport').addEventListener('click', exportXlsx);
 
 // ================================================================
 // v0.3.9：上傳 Excel/CSV 批次匯入
@@ -1337,6 +1164,20 @@ async function parseImportFile(file) {
   const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
   if (!aoa.length) return { error: '檔案是空的' };
 
+  // v0.3.12：展開合併儲存格 — 官方表格常把整批相同的「檢驗對象」直向合併，
+  // sheet_to_json 只有錨點列有值，其餘為空 → 依 !merges 把錨點值補進整個範圍（不覆蓋既有值）
+  (ws['!merges'] || []).forEach(mr => {
+    const anchor = ws[XLSX.utils.encode_cell(mr.s)];
+    const v = anchor == null ? undefined : anchor.v;
+    if (v === undefined || v === null || v === '') return;
+    for (let r = mr.s.r; r <= mr.e.r && r < aoa.length; r++) {
+      if (!aoa[r]) aoa[r] = [];
+      for (let c = mr.s.c; c <= mr.e.c; c++) {
+        if (aoa[r][c] == null || aoa[r][c] === '') aoa[r][c] = v;
+      }
+    }
+  });
+
   // 找表頭列：前 10 列中命中欄位關鍵字最多者
   let headerRow = -1, bestHits = 0, bestMap = null;
   const scan = Math.min(10, aoa.length);
@@ -1361,31 +1202,34 @@ async function parseImportFile(file) {
   else if (bestMap.consult != null) mode = 'anon';
   else mode = 'named';
 
-  // v0.3.11：表頭是具名格式、內容卻是匿名（官方送驗單匿名用法：諮詢代碼填在姓名欄）
-  // 條件：具官方表格形（有出生/身分證欄）、資料列（姓名欄有值）出生＋身分證全空，
-  //       且檢驗對象有值且全為 11/12（匿名篩檢）→ 改判匿名
-  //       只掃姓名欄有值的資料列，避免代碼說明列/註腳誤觸發或壓制判定
-  let anonTarget = '', anonFromNamedHeader = false, anonMixedTargets = false;
+  // v0.3.12：表頭固定是官方具名格式，改判匿名「只依檢驗對象」（唯一可靠訊號）：
+  //   資料列（姓名/諮詢代碼欄有值）檢驗對象全為 11/12 → 判匿名，不再要求出生/身分證全空；
+  //   出生/身分證/性別若有資料另加警告（匿名清單只匯入諮詢代碼＋採檢日期）。
+  //   防呆保留：只掃資料列（說明列/註腳不算）、11/12 用字首嚴格比對（'1,2' 不誤中）、
+  //   混到 1-10 或空白列多於 11/12 列 → 照舊判具名。
+  let anonTarget = '', anonFromNamedHeader = false, anonMixedTargets = false, anonDropsPersonal = false;
   if (mode === 'named' && bestMap.name != null && bestMap.target != null &&
       (bestMap.birth != null || bestMap.id != null)) {
-    let hasBirthOrId = false, sawOtherTarget = false;
+    let sawOtherTarget = false, hasPersonal = false, blankTargets = 0, anonRows = 0;
     const targetVals = new Set();
     for (let i = headerRow + 1; i < aoa.length; i++) {
       const row = aoa[i] || [];
       const hasKey = fmtImportCell(row[bestMap.name]) ||
         (bestMap.consult != null && fmtImportCell(row[bestMap.consult]));
       if (!hasKey) continue;
-      if (bestMap.birth != null && fmtImportCell(row[bestMap.birth])) { hasBirthOrId = true; break; }
-      if (bestMap.id != null && fmtImportCell(row[bestMap.id])) { hasBirthOrId = true; break; }
+      if ((bestMap.birth != null && fmtImportCell(row[bestMap.birth])) ||
+          (bestMap.id != null && fmtImportCell(row[bestMap.id])) ||
+          (bestMap.sex != null && fmtImportCell(row[bestMap.sex]))) hasPersonal = true;
       const t = fmtImportCell(row[bestMap.target]);
-      if (t) {
-        const m = t.match(/^\s*(11|12)\b/);
-        if (m) targetVals.add(m[1]); else sawOtherTarget = true;
-      }
+      if (!t) { blankTargets++; continue; }
+      const m = t.match(/^\s*(11|12)\b/);
+      if (m) { targetVals.add(m[1]); anonRows++; }
+      else sawOtherTarget = true;
     }
-    if (!hasBirthOrId && !sawOtherTarget && targetVals.size > 0) {
+    if (!sawOtherTarget && anonRows > 0 && anonRows >= blankTargets) {
       mode = 'anon';
       anonFromNamedHeader = true;
+      anonDropsPersonal = hasPersonal;
       if (bestMap.consult == null) bestMap.consult = bestMap.name;
       if (targetVals.size === 1) anonTarget = [...targetVals][0];
       else anonMixedTargets = true;
@@ -1430,7 +1274,8 @@ async function parseImportFile(file) {
     if (noConsult) warnings.push('⚠ ' + noConsult + ' 筆缺諮詢代碼');
   }
   if (anonFromNamedHeader) {
-    warnings.unshift('ℹ 表頭為具名格式，但出生/身分證全空且檢驗對象皆為 11/12 → 判定為匿名送驗，「姓名」欄視為諮詢代碼');
+    warnings.unshift('ℹ 表頭為具名格式，但檢驗對象皆為 11/12 → 判定為匿名送驗，「姓名」欄視為諮詢代碼');
+    if (anonDropsPersonal) warnings.push('⚠ 檔內含出生/身分證/性別資料：匿名清單僅匯入諮詢代碼＋採檢日期，這些欄位將不匯入');
     if (anonMixedTargets) warnings.push('⚠ 檔內檢驗對象混含 11 與 12：匿名清單無逐筆對象欄，寫入雲端時整批套用抬頭的單一代碼，請自行確認');
   }
   return { mode, mapping: bestMap, rows, total: rows.length, warnings, anonTarget };
