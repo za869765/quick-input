@@ -293,7 +293,7 @@
   </div>
 </div>
 
-<div class="ver">v0.3.10</div>
+<div class="ver">v0.3.11</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -739,6 +739,17 @@ function smartDate(input) {
   if (!v) return '';
   if (/^(t|today|今天)$/i.test(v)) return todayMinguo();
   if (/^(y|yesterday|昨天|昨)$/i.test(v)) { const d = new Date(); d.setDate(d.getDate() - 1); return mguDate(d); }
+  // 帶分隔符（/, -, .）優先解析 — 否則 2026/6/30 會被剝成 7 碼誤切成 202/66/30（與 index.html 同源）
+  // 僅接手「純數字且月/日 ≤2 位」的正常格式；異常（如 115/063/0、尾帶註記）退回下方數字邏輯救回
+  const parts = v.split(/[\.\-\/]/).map(x => x.trim()).filter(x => x);
+  if (parts.length === 3 && parts.every(p => /^\d+$/.test(p))) {
+    if (parts[2].length === 4 && parts[0].length <= 2) parts.unshift(parts.pop()); // 美式 M/D/YYYY → Y/M/D
+    if (parts[0].length <= 4 && parts[1].length <= 2 && parts[2].length <= 2) {
+      let y = parts[0];
+      if (/^\d{4}$/.test(y)) { const yy = parseInt(y, 10); if (yy >= 1900) y = String(yy - 1911); }
+      return y + '/' + parts[1].padStart(2,'0') + '/' + parts[2].padStart(2,'0');
+    }
+  }
   const digits = v.replace(/\D/g, '');
   if (digits.length >= 2 && digits.length <= 4 && digits === v) {
     if (digits.length === 4) {
@@ -764,12 +775,6 @@ function smartDate(input) {
   if (digits.length === 8) {
     const yy = parseInt(digits.slice(0,4), 10);
     if (yy >= 1900 && yy <= 2099) return (yy - 1911) + '/' + digits.slice(4,6) + '/' + digits.slice(6);
-  }
-  const parts = v.split(/[\.\-\/]/).map(x => x.trim()).filter(x => x);
-  if (parts.length === 3) {
-    let y = parts[0];
-    if (/^\d{4}$/.test(y)) { const yy = parseInt(y, 10); if (yy >= 1900) y = String(yy - 1911); }
-    return y + '/' + parts[1].padStart(2,'0') + '/' + parts[2].padStart(2,'0');
   }
   return v;
 }

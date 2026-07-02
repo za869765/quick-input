@@ -250,7 +250,7 @@
 </div>
 
 </div>
-<div class="ver">v0.3.10</div>
+<div class="ver">v0.3.11</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -369,6 +369,20 @@ function smartDate(input) {
   if (/^(y|yesterday|昨天|昨)$/i.test(v)) {
     const d = new Date(); d.setDate(d.getDate() - 1); return mguDate(d);
   }
+  // 帶分隔符（/, -, .）優先解析 — 否則 2026/6/30 會被剝成 7 碼誤切成 202/66/30
+  // 僅接手「純數字且月/日 ≤2 位」的正常格式；異常（如 115/063/0、尾帶註記）退回下方數字邏輯救回
+  const parts = v.split(/[\.\-\/]/).map(x => x.trim()).filter(x => x);
+  if (parts.length === 3 && parts.every(p => /^\d+$/.test(p))) {
+    if (parts[2].length === 4 && parts[0].length <= 2) parts.unshift(parts.pop()); // 美式 M/D/YYYY → Y/M/D
+    if (parts[0].length <= 4 && parts[1].length <= 2 && parts[2].length <= 2) {
+      let y = parts[0];
+      if (/^\d{4}$/.test(y)) {
+        const yy = parseInt(y, 10);
+        if (yy >= 1900) y = String(yy - 1911);
+      }
+      return y + '/' + parts[1].padStart(2,'0') + '/' + parts[2].padStart(2,'0');
+    }
+  }
   const digits = v.replace(/\D/g, '');
 
   // 純年份（2~4 位）— 民國/西元自動辨識
@@ -414,15 +428,6 @@ function smartDate(input) {
     if (yy >= 1900 && yy <= 2099) {
       return (yy - 1911) + '/' + digits.slice(4,6) + '/' + digits.slice(6);
     }
-  }
-  const parts = v.split(/[\.\-\/]/).map(x => x.trim()).filter(x => x);
-  if (parts.length === 3) {
-    let y = parts[0];
-    if (/^\d{4}$/.test(y)) {
-      const yy = parseInt(y, 10);
-      if (yy >= 1900) y = String(yy - 1911);
-    }
-    return y + '/' + parts[1].padStart(2,'0') + '/' + parts[2].padStart(2,'0');
   }
   return v;
 }
@@ -1356,6 +1361,37 @@ async function parseImportFile(file) {
   else if (bestMap.consult != null) mode = 'anon';
   else mode = 'named';
 
+  // v0.3.11：表頭是具名格式、內容卻是匿名（官方送驗單匿名用法：諮詢代碼填在姓名欄）
+  // 條件：具官方表格形（有出生/身分證欄）、資料列（姓名欄有值）出生＋身分證全空，
+  //       且檢驗對象有值且全為 11/12（匿名篩檢）→ 改判匿名
+  //       只掃姓名欄有值的資料列，避免代碼說明列/註腳誤觸發或壓制判定
+  let anonTarget = '', anonFromNamedHeader = false, anonMixedTargets = false;
+  if (mode === 'named' && bestMap.name != null && bestMap.target != null &&
+      (bestMap.birth != null || bestMap.id != null)) {
+    let hasBirthOrId = false, sawOtherTarget = false;
+    const targetVals = new Set();
+    for (let i = headerRow + 1; i < aoa.length; i++) {
+      const row = aoa[i] || [];
+      const hasKey = fmtImportCell(row[bestMap.name]) ||
+        (bestMap.consult != null && fmtImportCell(row[bestMap.consult]));
+      if (!hasKey) continue;
+      if (bestMap.birth != null && fmtImportCell(row[bestMap.birth])) { hasBirthOrId = true; break; }
+      if (bestMap.id != null && fmtImportCell(row[bestMap.id])) { hasBirthOrId = true; break; }
+      const t = fmtImportCell(row[bestMap.target]);
+      if (t) {
+        const m = t.match(/^\s*(11|12)\b/);
+        if (m) targetVals.add(m[1]); else sawOtherTarget = true;
+      }
+    }
+    if (!hasBirthOrId && !sawOtherTarget && targetVals.size > 0) {
+      mode = 'anon';
+      anonFromNamedHeader = true;
+      if (bestMap.consult == null) bestMap.consult = bestMap.name;
+      if (targetVals.size === 1) anonTarget = [...targetVals][0];
+      else anonMixedTargets = true;
+    }
+  }
+
   const get = (row, key) => bestMap[key] == null ? '' : fmtImportCell(row[bestMap[key]]);
 
   const rows = [];
@@ -1393,7 +1429,11 @@ async function parseImportFile(file) {
     const noConsult = rows.filter(r => !r.consult).length;
     if (noConsult) warnings.push('⚠ ' + noConsult + ' 筆缺諮詢代碼');
   }
-  return { mode, mapping: bestMap, rows, total: rows.length, warnings };
+  if (anonFromNamedHeader) {
+    warnings.unshift('ℹ 表頭為具名格式，但出生/身分證全空且檢驗對象皆為 11/12 → 判定為匿名送驗，「姓名」欄視為諮詢代碼');
+    if (anonMixedTargets) warnings.push('⚠ 檔內檢驗對象混含 11 與 12：匿名清單無逐筆對象欄，寫入雲端時整批套用抬頭的單一代碼，請自行確認');
+  }
+  return { mode, mapping: bestMap, rows, total: rows.length, warnings, anonTarget };
 }
 
 function showImportPreview(parsed, fileName) {
@@ -1486,6 +1526,7 @@ function applyModeUI(mode) {
 
 async function commitImport(parsed) {
   applyModeUI(parsed.mode);
+  if (parsed.mode === 'anon' && parsed.anonTarget) $('hdr_target').value = parsed.anonTarget;
   tbody.innerHTML = '';
   rowSeq = 0;
   renderHead();
