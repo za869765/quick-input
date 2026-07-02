@@ -249,7 +249,7 @@
 </div>
 
 </div>
-<div class="ver">v0.3.13</div>
+<div class="ver">v0.3.14</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -977,7 +977,8 @@ async function syncRowsToCloud(rows, hdr) {
       }
     }
     toast('✓ 雲端已存 ' + (inserted + updated) + ' 筆（新 ' + inserted + ' / 覆寫 ' + updated + '）');
-    fetchMaxFromCloud();
+    /* v0.3.14：流水號刷新移到 confirmWriteCloud 成功路徑統一處理（先清空再 await 刷新，
+       這裡不等待的 fetchMaxFromCloud 若在補新列後才回來，會把空列重編跳號） */
     return { ok: true, inserted, updated, reallocations };
   } catch (e) {
     return { ok: false, err: e.message || '連線失敗' };
@@ -1428,8 +1429,21 @@ async function confirmWriteCloud() {
   if (!confirm('確定將目前清單 ' + rows.length + ' 筆寫入雲端？\n（同編號會覆蓋更新，舊值自動存歷史可還原）')) return;
   try {
     const r = await syncRowsToCloud(rows, hdr);
-    if (!r || !r.ok) alert('雲端寫入失敗：' + ((r && r.err) || 'unknown'));
-    // 成功時 syncRowsToCloud 已 toast 並更新流水號
+    if (!r || !r.ok) {
+      alert('雲端寫入失敗：' + ((r && r.err) || 'unknown'));
+      return; // 失敗保留清單讓使用者重試
+    }
+    /* v0.3.14：寫入成功 → 清空清單與暫存。
+       否則殘留清單在下次載入會被 reconcileSerialConflicts 當舊草稿整批重編新號，
+       再按一次寫入就變成整批重複資料 */
+    tbody.innerHTML = '';
+    rowSeq = 0;
+    try { localStorage.removeItem('quickInputDraft'); } catch (_) {}
+    try { await fetchMaxFromCloud(); } catch (_) {} // 先刷新雲端流水號再補空列，接續不跳號
+    addRow();
+    updateNoPreview();
+    updateCounter();
+    toast('✓ 已寫入 ' + rows.length + ' 筆並清空清單（可到「查詢以前資料」檢視/修改）', 5000);
   } catch (e) {
     alert('雲端寫入失敗：' + (e.message || e));
   }
