@@ -249,7 +249,7 @@
 </div>
 
 </div>
-<div class="ver">v0.3.12</div>
+<div class="ver">v0.3.13</div>
 
 <script>
 const $ = (id) => document.getElementById(id);
@@ -1164,20 +1164,6 @@ async function parseImportFile(file) {
   const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
   if (!aoa.length) return { error: '檔案是空的' };
 
-  // v0.3.12：展開合併儲存格 — 官方表格常把整批相同的「檢驗對象」直向合併，
-  // sheet_to_json 只有錨點列有值，其餘為空 → 依 !merges 把錨點值補進整個範圍（不覆蓋既有值）
-  (ws['!merges'] || []).forEach(mr => {
-    const anchor = ws[XLSX.utils.encode_cell(mr.s)];
-    const v = anchor == null ? undefined : anchor.v;
-    if (v === undefined || v === null || v === '') return;
-    for (let r = mr.s.r; r <= mr.e.r && r < aoa.length; r++) {
-      if (!aoa[r]) aoa[r] = [];
-      for (let c = mr.s.c; c <= mr.e.c; c++) {
-        if (aoa[r][c] == null || aoa[r][c] === '') aoa[r][c] = v;
-      }
-    }
-  });
-
   // 找表頭列：前 10 列中命中欄位關鍵字最多者
   let headerRow = -1, bestHits = 0, bestMap = null;
   const scan = Math.min(10, aoa.length);
@@ -1194,6 +1180,23 @@ async function parseImportFile(file) {
   if (headerRow < 0 || bestHits < 1 || !bestMap) {
     return { error: '無法辨識欄位標題。請確認檔案有一列標題含：姓名 / 出生年月日 / 身分證 / 性別 / 採檢日期（或匿名的「諮詢代碼」）。' };
   }
+
+  // v0.3.13：展開「資料區」的合併儲存格 — 官方表格常把整批相同的「檢驗對象」直向合併，
+  // sheet_to_json 只有錨點列有值，其餘為空 → 依 !merges 把錨點值補進整個範圍（不覆蓋既有值）。
+  // 只展開起點在表頭列之下的合併：表頭本身是 X3:X5 直向合併（姓名/檢驗對象…），
+  // 一起展開會把表頭文字灌進說明列，讓說明列變成假資料列（v0.3.12 實測 335 筆變 337 且誤判具名）
+  (ws['!merges'] || []).forEach(mr => {
+    if (mr.s.r <= headerRow) return;
+    const anchor = ws[XLSX.utils.encode_cell(mr.s)];
+    const v = anchor == null ? undefined : anchor.v;
+    if (v === undefined || v === null || v === '') return;
+    for (let r = mr.s.r; r <= mr.e.r && r < aoa.length; r++) {
+      if (!aoa[r]) aoa[r] = [];
+      for (let c = mr.s.c; c <= mr.e.c; c++) {
+        if (aoa[r][c] == null || aoa[r][c] === '') aoa[r][c] = v;
+      }
+    }
+  });
 
   // 判斷模式
   let mode;
